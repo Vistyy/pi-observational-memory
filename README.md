@@ -20,7 +20,7 @@ pi -e /home/syzom/projects/pi-extensions/pi-observational-memory
 ## Install from GitHub
 
 ```bash
-pi install git:github.com/Vistyy/pi-observational-memory@v0.1.0
+pi install git:github.com/Vistyy/pi-observational-memory@v0.1.1
 ```
 
 ## How it works
