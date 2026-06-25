@@ -1,6 +1,6 @@
 {
   "name": "pi-observational-memory",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Pi package for session-local observational memory.",
   "private": true,
   "type": "module",

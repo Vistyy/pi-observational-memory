@@ -316,7 +316,7 @@ describe("memory update hook", () => {
 		await runLaunchedWork();
 
 		expect(getMemoryAppends()).toEqual([]);
-		expect(ctx.ui.notify).toHaveBeenCalledWith("Observational memory: observer skipped — no model", "warning");
+		expect(ctx.ui.notify).toHaveBeenCalledWith("Observational memory: observer skipped - no model", "warning");
 	});
 
 	it("re-reads branch so observer append can unblock reflector in the same memory update run", async () => {

@@ -17,7 +17,7 @@ export function makeModelResolver(runtime: Runtime, ctx: MemoryUpdateCtx): (stag
 		}
 		debugLog(`${stage}.model_unavailable`, { reason: cached.reason });
 		if (!runtime.resolveFailureNotified && ctx.hasUI && ctx.ui) {
-			ctx.ui.notify(`Observational memory: ${stage} skipped — ${cached.reason}`, "warning");
+			ctx.ui.notify(`Observational memory: ${stage} skipped - ${cached.reason}`, "warning");
 			runtime.resolveFailureNotified = true;
 		}
 		return undefined;

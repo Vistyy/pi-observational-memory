@@ -20,7 +20,7 @@ pi -e /home/syzom/projects/pi-extensions/pi-observational-memory
 ## Install from GitHub
 
 ```bash
-pi install git:github.com/Vistyy/pi-observational-memory@v0.1.1
+pi install git:github.com/Vistyy/pi-observational-memory@v0.1.2
 ```
 
 ## How it works
@@ -59,6 +59,20 @@ Configure under `observational-memory`:
     "reflectorThinking": "low",
     "rewriteThinking": "low",
     "debugLog": false
+  }
+}
+```
+
+Tool output excerpt policies are opt-in.
+Add this only if you want OM to record full excerpts for child tools:
+
+```json
+{
+  "observational-memory": {
+    "observerToolOutputPolicies": {
+      "fork": "full-excerpt",
+      "subagent": "full-excerpt"
+    }
   }
 }
 ```
