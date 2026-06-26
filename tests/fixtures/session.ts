@@ -30,9 +30,19 @@ export type TestReflection = {
 	createdAt: string;
 };
 
+export type TestCheckpoint = {
+	id: string;
+	content: string;
+	createdAt: string;
+	contentFormat: "markdown";
+};
+
 export const OM_OBSERVATIONS_RECORDED = "om.observations.recorded";
 export const OM_REFLECTIONS_RECORDED = "om.reflections.recorded";
 export const OM_REFLECTIONS_REWRITTEN = "om.reflections.rewritten";
+export const OM_CHECKPOINT_RECORDED = "om.checkpoint.recorded";
+export const OM_CHECKPOINT_COVERAGE_ADVANCED = "om.checkpoint.coverage_advanced";
+export const OM_CHECKPOINT = "om.checkpoint";
 export const OM_FOLDED = "om.folded";
 
 const DEFAULT_TIMESTAMP = "2026-05-02T10:00:00.000Z";
@@ -118,6 +128,17 @@ export function memoryDetails(
 	};
 }
 
+export function checkpointMemoryDetails(
+	checkpoint: TestCheckpoint,
+	args: { coversUpToObservationId?: string } = {},
+): unknown {
+	return {
+		type: OM_CHECKPOINT,
+		checkpoint,
+		...args,
+	};
+}
+
 export function observation(
 	id: string,
 	overrides: Partial<TestObservation> = {},
@@ -145,6 +166,19 @@ export function reflection(
 		content: `Reflection ${id}`,
 		sources: sources.map((source) => source.startsWith("obs_") || source.startsWith("ref_") ? source : `obs_${source}`),
 		createdAt: DEFAULT_TIMESTAMP,
+		...overrides,
+	};
+}
+
+export function checkpoint(
+	id: string,
+	overrides: Partial<TestCheckpoint> = {},
+): TestCheckpoint {
+	return {
+		id: id.startsWith("check_") ? id : `check_${id}`,
+		content: `# Checkpoint\n\n## Current objective\n\nNone known.\n\n## Progress and decisions\n\nNone known.\n\n## Important context\n\nNone known.\n\n## Remaining work\n\nNone known.\n\n## References and anchors\n\nNone known.`,
+		createdAt: DEFAULT_TIMESTAMP,
+		contentFormat: "markdown",
 		...overrides,
 	};
 }
@@ -200,6 +234,37 @@ export function reflectionsRewrittenEntry(
 	};
 }
 
+export function checkpointRecordedEntry(
+	id: string,
+	args: { checkpoint: TestCheckpoint; coversUpToObservationId: string; observationIds: string[]; mode?: "update" | "prune" },
+	overrides: Partial<TestEntry> = {},
+): TestEntry {
+	return {
+		type: "custom",
+		id,
+		parentId: null,
+		timestamp: DEFAULT_TIMESTAMP,
+		customType: OM_CHECKPOINT_RECORDED,
+		data: { mode: args.mode ?? "update", checkpoint: args.checkpoint, coversUpToObservationId: args.coversUpToObservationId, observationIds: args.observationIds },
+		...overrides,
+	};
+}
+
+export function checkpointCoverageAdvancedEntry(
+	id: string,
+	args: { coversUpToObservationId: string; observationIds: string[]; reason?: string },
+	overrides: Partial<TestEntry> = {},
+): TestEntry {
+	return {
+		type: "custom",
+		id,
+		parentId: null,
+		timestamp: DEFAULT_TIMESTAMP,
+		customType: OM_CHECKPOINT_COVERAGE_ADVANCED,
+		data: { coversUpToObservationId: args.coversUpToObservationId, observationIds: args.observationIds, reason: args.reason ?? "No checkpoint content change." },
+		...overrides,
+	};
+}
 
 export function fakeSessionContext(initialEntries: TestEntry[] = []) {
 	let entries = [...initialEntries];

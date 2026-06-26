@@ -1,10 +1,15 @@
 import {
 	isReflectionsRewrittenData,
+	normalizeCheckpointCoverageAdvancedData,
+	normalizeCheckpointRecordedData,
 	normalizeObservationsRecordedData,
 	normalizeReflectionsRecordedData,
+	OM_CHECKPOINT_COVERAGE_ADVANCED,
+	OM_CHECKPOINT_RECORDED,
 	OM_OBSERVATIONS_RECORDED,
 	OM_REFLECTIONS_RECORDED,
 	OM_REFLECTIONS_REWRITTEN,
+	type Checkpoint,
 	type Entry,
 	type Observation,
 	type Reflection,
@@ -33,6 +38,14 @@ export type FoldedLedger = {
 	lastReflectionCoverageId?: string;
 	/** Observations whose source entries are newer than the latest reflection coverage. */
 	unreflectedObservations: Observation[];
+	/** Latest valid checkpoint snapshot, if one has been recorded. */
+	checkpoint?: Checkpoint;
+	/** All valid checkpoint snapshots encountered through the fold boundary. */
+	checkpoints: Checkpoint[];
+	/** Observation id covered by the latest checkpoint recorded or coverage-advanced event. */
+	lastCheckpointCoverageObservationId?: string;
+	/** Observations newer than latest checkpoint coverage. */
+	uncheckpointedObservations: Observation[];
 };
 
 const SOURCE_ENTRY_TYPES = new Set(["message", "custom_message", "branch_summary", "compaction"]);
@@ -72,7 +85,9 @@ export function sourceEntriesAfterIndex(entries: Entry[], index: number, beforeI
 export function foldLedger(entries: Entry[], options: FoldLedgerOptions = {}): FoldedLedger {
 	const observationsById = new Map<string, Observation>();
 	const reflectionsById = new Map<string, Reflection>();
+	const checkpoints: Checkpoint[] = [];
 	const retiredReflectionIds = new Set<string>();
+	let lastCheckpointCoverageObservationId: string | undefined;
 	const endIdx = foldEndIndex(entries, options.upToEntryId);
 	const idToIndex = entryIndexById(entries);
 	const observationCoverage: { index: number; id?: string } = { index: -1 };
@@ -105,6 +120,21 @@ export function foldLedger(entries: Entry[], options: FoldLedgerOptions = {}): F
 		if (isCustomEntry(entry, OM_REFLECTIONS_REWRITTEN)) {
 			if (!isReflectionsRewrittenData(entry.data)) continue;
 			for (const id of entry.data.retiredReflectionIds) retiredReflectionIds.add(typedReflectionId(id));
+			continue;
+		}
+
+		if (isCustomEntry(entry, OM_CHECKPOINT_RECORDED)) {
+			const data = normalizeCheckpointRecordedData(entry.data);
+			if (!data) continue;
+			checkpoints.push(data.checkpoint);
+			lastCheckpointCoverageObservationId = data.coversUpToObservationId;
+			continue;
+		}
+
+		if (isCustomEntry(entry, OM_CHECKPOINT_COVERAGE_ADVANCED)) {
+			const data = normalizeCheckpointCoverageAdvancedData(entry.data);
+			if (!data) continue;
+			lastCheckpointCoverageObservationId = data.coversUpToObservationId;
 		}
 	}
 
@@ -113,6 +143,10 @@ export function foldLedger(entries: Entry[], options: FoldLedgerOptions = {}): F
 	const unreflectedObservations = observations.filter((observation) =>
 		observation.sourceEntryIds.some((sourceEntryId) => (idToIndex.get(sourceEntryId) ?? -1) > reflectionCoverage.index),
 	);
+	const checkpointCoverageIndex = lastCheckpointCoverageObservationId
+		? observations.findIndex((observation) => observation.id === lastCheckpointCoverageObservationId)
+		: -1;
+	const uncheckpointedObservations = observations.filter((_, index) => index > checkpointCoverageIndex);
 
 	return {
 		observations,
@@ -123,5 +157,9 @@ export function foldLedger(entries: Entry[], options: FoldLedgerOptions = {}): F
 		lastObservationCoverageId: observationCoverage.id,
 		lastReflectionCoverageId: reflectionCoverage.id,
 		unreflectedObservations,
+		checkpoint: checkpoints.at(-1),
+		checkpoints,
+		lastCheckpointCoverageObservationId,
+		uncheckpointedObservations,
 	};
 }

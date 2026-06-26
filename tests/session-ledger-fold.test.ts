@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { foldLedger } from "../src/session-ledger/fold.js";
-import { observation, observationsRecordedEntry, reflection, reflectionsRecordedEntry, reflectionsRewrittenEntry, rawMessage } from "./fixtures/session.js";
+import { checkpoint, checkpointCoverageAdvancedEntry, checkpointRecordedEntry, observation, observationsRecordedEntry, reflection, reflectionsRecordedEntry, reflectionsRewrittenEntry, rawMessage } from "./fixtures/session.js";
 
 describe("session-ledger folding", () => {
 	it("folds typed observations and active reflections", () => {
@@ -31,6 +31,38 @@ describe("session-ledger folding", () => {
 
 		expect(folded.observations.map((obs) => obs.content)).toEqual(["first"]);
 		expect(folded.reflections.map((ref) => ref.content)).toEqual(["first ref"]);
+	});
+
+	it("folds checkpoint snapshots and checkpoint coverage", () => {
+		const obsA = observation("aaaaaaaaaaaa");
+		const obsB = observation("bbbbbbbbbbbb", { sourceEntryIds: ["raw-2"] });
+		const checkA = checkpoint("cccccccccccc", { content: checkpoint("cccccccccccc").content.replace("None known.", "Initial objective.") });
+		const folded = foldLedger([
+			rawMessage("raw-1", "source 1"),
+			rawMessage("raw-2", "source 2"),
+			observationsRecordedEntry("om-obs", { observations: [obsA, obsB], coversUpToId: "raw-2" }),
+			checkpointRecordedEntry("om-check", { checkpoint: checkA, coversUpToObservationId: obsA.id, observationIds: [obsA.id] }),
+		]);
+
+		expect(folded.checkpoint).toEqual(checkA);
+		expect(folded.checkpoints).toEqual([checkA]);
+		expect(folded.lastCheckpointCoverageObservationId).toBe(obsA.id);
+		expect(folded.uncheckpointedObservations).toEqual([obsB]);
+	});
+
+	it("folds checkpoint coverage advancement without replacing the current checkpoint", () => {
+		const obsA = observation("aaaaaaaaaaaa");
+		const obsB = observation("bbbbbbbbbbbb", { sourceEntryIds: ["raw-2"] });
+		const checkA = checkpoint("cccccccccccc");
+		const folded = foldLedger([
+			observationsRecordedEntry("om-obs", { observations: [obsA, obsB], coversUpToId: "raw-2" }),
+			checkpointRecordedEntry("om-check", { checkpoint: checkA, coversUpToObservationId: obsA.id, observationIds: [obsA.id] }),
+			checkpointCoverageAdvancedEntry("om-check-coverage", { coversUpToObservationId: obsB.id, observationIds: [obsB.id] }),
+		]);
+
+		expect(folded.checkpoint).toEqual(checkA);
+		expect(folded.lastCheckpointCoverageObservationId).toBe(obsB.id);
+		expect(folded.uncheckpointedObservations).toEqual([]);
 	});
 
 	it("retires rewritten reflections from active fold while preserving lookup history", () => {
