@@ -8,6 +8,9 @@ When a chunk contains more evidence than is worth recording, prefer source facts
 
 Do not record transcript mechanics: tool calls, hidden or omitted payload markers, generic success receipts, acknowledgements, routine progress, or plans with no accepted outcome.
 
+Do not infer facts from omitted tool output.
+Only record facts supported by visible lines and command/status metadata.
+
 Stay source-close. Do not infer beyond visible text. If the source is an assistant summary, say the assistant reported it.
 
 Use exact names, paths, commands, errors, ids, and numbers when they are part of the evidence.
@@ -18,7 +21,7 @@ export const OBSERVER_OBSERVATION_CONTENT_DESCRIPTION =
 	"One source-backed evidence atom. Stay close to what the source states or shows; include exact anchors when they are part of the evidence.";
 
 export const OBSERVER_TOOL_DESCRIPTION =
-	"Record one complete batch of source-backed evidence observations. Use an empty observations array when the chunk contains no substantive source payloads. This tool call terminates the run.";
+	"Record one complete batch of source-backed evidence observations. This tool call terminates the run.";
 
 export function observerUserText(now: string, conversation: string): string {
 	return `Current local time: ${now}

@@ -37,7 +37,7 @@ describe("config", () => {
 	it("uses defaults", () => {
 		expect(DEFAULTS).toEqual({
 			strategy: STRATEGY.replacement,
-			observeEveryMessages: 32,
+			observeEveryMessages: 8,
 			reflectEveryObservations: 8,
 			maintainEveryNewReflections: 10,
 			maintainerMaxInputReflections: 12,
@@ -70,7 +70,7 @@ describe("config", () => {
 				observerToolResultSummaryMaxLines: 2,
 				observerToolResultErrorMaxLines: 10,
 				observerToolResultLineMaxChars: 120,
-				observerToolOutputPolicies: { fork: "bounded-excerpt", web_fetch: "bounded-excerpt", bad: "nope" },
+				observerToolOutputPolicies: { fork: "bounded", web_fetch: "bounded", bad: "nope" },
 				agentMaxTurns: 5,
 				model: { provider: "anthropic", id: "global", thinking: "medium" },
 				observerThinking: "low",
@@ -84,7 +84,7 @@ describe("config", () => {
 			"observational-memory": {
 				strategy: "replacement",
 				observeEveryMessages: 100,
-				observerToolOutputPolicies: { fork: "full-excerpt", custom_tool: "metadata-only" },
+				observerToolOutputPolicies: { fork: "full", custom_tool: "omit" },
 				model: { provider: "openai", id: "project", thinking: "low" },
 			},
 		});
@@ -100,7 +100,7 @@ describe("config", () => {
 			observerToolResultSummaryMaxLines: 2,
 			observerToolResultErrorMaxLines: 10,
 			observerToolResultLineMaxChars: 120,
-			observerToolOutputPolicies: { fork: "full-excerpt", web_fetch: "bounded-excerpt", custom_tool: "metadata-only" },
+			observerToolOutputPolicies: { fork: "full", web_fetch: "bounded", custom_tool: "omit" },
 			agentMaxTurns: 5,
 			model: { provider: "openai", id: "project", thinking: "low" },
 			observerThinking: "low",
@@ -124,7 +124,7 @@ describe("config", () => {
 				observerToolResultSummaryMaxLines: "4",
 				observerToolResultErrorMaxLines: -1,
 				observerToolResultLineMaxChars: null,
-				observerToolOutputPolicies: { fork: "giant", "": "bounded-excerpt" },
+				observerToolOutputPolicies: { fork: "giant", "": "bounded" },
 				agentMaxTurns: null,
 				model: { provider: "anthropic", id: "", thinking: "huge" },
 				observerThinking: "huge",

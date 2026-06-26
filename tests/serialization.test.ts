@@ -7,7 +7,7 @@ const observerToolOptions: ObserverToolRenderingOptions = {
 	toolResultSummaryMaxLines: 4,
 	toolResultErrorMaxLines: 20,
 	toolResultLineMaxChars: 300,
-	toolOutputPolicies: { fork: "full-excerpt" },
+	toolOutputPolicies: { fork: "full" },
 };
 
 describe("memory serialization", () => {
@@ -35,7 +35,7 @@ describe("memory serialization", () => {
 		expect(text).not.toContain("Maybe this is irrelevant");
 	});
 
-	it("drops assistant tool calls while keeping assistant text", () => {
+	it("stops before assistant text with an in-flight tool call", () => {
 		const { text, sourceEntryIds } = serializeObserverSourceEntries([
 			{
 				type: "message",
@@ -52,8 +52,8 @@ describe("memory serialization", () => {
 			},
 		] as any, observerToolOptions);
 
-		expect(sourceEntryIds).toEqual(["assistant-tool-call"]);
-		expect(text).toContain("I will update the config.");
+		expect(sourceEntryIds).toEqual([]);
+		expect(text).toBe("");
 		expect(text).not.toContain("Attempted tool call");
 		expect(text).not.toContain("input: src/config.ts");
 		expect(text).not.toContain("payload: omitted");
@@ -63,7 +63,7 @@ describe("memory serialization", () => {
 		expect(text).not.toContain("yyyy");
 	});
 
-	it("skips successful generic tool results when policy would be metadata-only", () => {
+	it("omits successful generic tool results by default", () => {
 		const output = `HEAD-${"a".repeat(9000)}-TAIL`;
 		const { text, sourceEntryIds } = serializeObserverSourceEntries([
 			{
@@ -72,13 +72,13 @@ describe("memory serialization", () => {
 				timestamp: "2026-05-02T10:00:00.000Z",
 				message: { role: "toolResult", timestamp: 1777716000000, toolName: "unknown_extension_tool", isError: false, path: "src/foo.ts", content: [{ type: "text", text: output }] },
 			},
-		] as any, { toolResultSummaryMaxLines: 4, toolResultErrorMaxLines: 20, toolResultLineMaxChars: 300, toolOutputPolicies: { fork: "full-excerpt" } });
+		] as any, { toolResultSummaryMaxLines: 4, toolResultErrorMaxLines: 20, toolResultLineMaxChars: 300, toolOutputPolicies: { fork: "full" } });
 
 		expect(sourceEntryIds).toEqual([]);
 		expect(text).toBe("");
 	});
 
-	it("skips successful mutation-style metadata-only tool results", () => {
+	it("omits successful mutation-style tool results by default", () => {
 		const { text, sourceEntryIds } = serializeObserverSourceEntries([
 			{
 				type: "message",
@@ -86,7 +86,7 @@ describe("memory serialization", () => {
 				timestamp: "2026-05-02T10:00:00.000Z",
 				message: { role: "toolResult", timestamp: 1777716000000, toolName: "edit", isError: false, path: "src/config.ts", content: [{ type: "text", text: "Successfully replaced 1 block in src/config.ts." }] },
 			},
-		] as any, { toolResultSummaryMaxLines: 0, toolResultErrorMaxLines: 20, toolResultLineMaxChars: 300, toolOutputPolicies: { fork: "full-excerpt" } });
+		] as any, { toolResultSummaryMaxLines: 0, toolResultErrorMaxLines: 20, toolResultLineMaxChars: 300, toolOutputPolicies: { fork: "full" } });
 
 		expect(sourceEntryIds).toEqual([]);
 		expect(text).toBe("");
@@ -101,14 +101,14 @@ describe("memory serialization", () => {
 				timestamp: "2026-05-02T10:00:00.000Z",
 				message: { role: "toolResult", timestamp: 1777716000000, toolName: "custom_runner", isError: true, content: [{ type: "text", text: output }] },
 			},
-		] as any, { toolResultSummaryMaxLines: 4, toolResultErrorMaxLines: 20, toolResultLineMaxChars: 300, toolOutputPolicies: { fork: "full-excerpt" } });
+		] as any, { toolResultSummaryMaxLines: 4, toolResultErrorMaxLines: 20, toolResultLineMaxChars: 300, toolOutputPolicies: { fork: "full" } });
 
 		expect(text).toContain("status: error");
 		expect(text).toContain("ERROR first line");
 		expect(text).toContain("Final stack line");
 	});
 
-	it("skips successful empty-output bash execution", () => {
+	it("renders successful empty-output bash execution as bounded command evidence", () => {
 		const { text, sourceEntryIds } = serializeObserverSourceEntries([
 			{
 				type: "message",
@@ -118,8 +118,11 @@ describe("memory serialization", () => {
 			},
 		] as any, observerToolOptions);
 
-		expect(sourceEntryIds).toEqual([]);
-		expect(text).toBe("");
+		expect(sourceEntryIds).toEqual(["bash-empty"]);
+		expect(text).toContain("tool: bash");
+		expect(text).toContain("status: success");
+		expect(text).toContain("command");
+		expect(text).toContain("[no textual output]");
 	});
 
 	it("renders bash execution through the same sanitized tool path", () => {
@@ -133,10 +136,11 @@ describe("memory serialization", () => {
 		] as any, observerToolOptions);
 
 		expect(sourceEntryIds).toEqual(["bash-1"]);
-		expect(text).toContain("[Tool evidence: bash @");
+		expect(text).toContain("[Tool interaction: bash @");
 		expect(text).toContain("status: error");
-		expect(text).toContain("input: pnpm test");
-		expect(text).toContain("exitCode: 1");
+		expect(text).toContain("command");
+		expect(text).toContain("pnpm test");
+		expect(text).toContain("exitCode");
 		expect(text).toContain("failed at exact needle");
 	});
 
@@ -185,9 +189,9 @@ describe("memory serialization", () => {
 				timestamp: "2026-06-11T14:02:00.000Z",
 				message: { role: "toolResult", timestamp: 1777716000000, toolName: "fork", isError: false, content: [{ type: "text", text: output }] },
 			},
-		] as any, { toolResultSummaryMaxLines: 4, toolResultErrorMaxLines: 20, toolResultLineMaxChars: 300, toolOutputPolicies: { fork: "full-excerpt" } });
+		] as any, { toolResultSummaryMaxLines: 4, toolResultErrorMaxLines: 20, toolResultLineMaxChars: 300, toolOutputPolicies: { fork: "full" } });
 
-		expect(text).toContain("output_omitted: false");
+		expect(text).toContain("result_omitted: false");
 		expect(text).toContain("Additive cross-compaction memory gap");
 		expect(text).toContain("src/hooks/additive-context.ts");
 		expect(text).toContain("fix compaction gap first");
@@ -210,10 +214,85 @@ describe("memory serialization", () => {
 				timestamp: "2026-05-02T10:01:00.000Z",
 				message: { role: "toolResult", timestamp: 1777716060000, toolName: "second", isError: false, content: [{ type: "text", text: "SECOND-" + "b".repeat(200) }] },
 			},
-		] as any, { toolResultSummaryMaxLines: 4, toolResultErrorMaxLines: 20, toolResultLineMaxChars: 300, toolOutputPolicies: { fork: "full-excerpt" } });
+		] as any, { toolResultSummaryMaxLines: 4, toolResultErrorMaxLines: 20, toolResultLineMaxChars: 300, toolOutputPolicies: { fork: "full" } });
 
 		expect(sourceEntryIds).toEqual([]);
 		expect(text).toBe("");
+	});
+
+	it("joins assistant tool calls with matching bash tool results", () => {
+		const { text, sourceEntryIds } = serializeObserverSourceEntries([
+			{
+				type: "message",
+				id: "assistant-call",
+				timestamp: "2026-05-02T10:00:00.000Z",
+				message: {
+					role: "assistant",
+					content: [
+						{ type: "text", text: "I will verify the release." },
+						{ type: "toolCall", id: "call-1", name: "bash", arguments: { command: "git status --short --branch" } },
+					],
+				},
+			},
+			{
+				type: "message",
+				id: "tool-result",
+				timestamp: "2026-05-02T10:01:00.000Z",
+				message: { role: "toolResult", toolCallId: "call-1", toolName: "bash", isError: false, content: [{ type: "text", text: "## main...origin/main\n907b437 Document checkpoint observer design" }] },
+			},
+		] as any, observerToolOptions);
+
+		expect(sourceEntryIds).toEqual(["assistant-call", "tool-result"]);
+		expect(text).toContain("I will verify the release.");
+		expect(text).toContain("[Source entry ids: assistant-call, tool-result]");
+		expect(text).toContain("tool: bash");
+		expect(text).toContain("git status --short --branch");
+		expect(text).toContain("907b437 Document checkpoint observer design");
+	});
+
+	it("renders abandoned unmatched tool calls as incomplete records", () => {
+		const { text, sourceEntryIds } = serializeObserverSourceEntries([
+			{
+				type: "message",
+				id: "assistant-call",
+				timestamp: "2026-05-02T10:00:00.000Z",
+				message: {
+					role: "assistant",
+					content: [{ type: "toolCall", id: "call-1", name: "fork", arguments: { task: "Investigate the crash" } }],
+				},
+			},
+			{
+				type: "message",
+				id: "user-after",
+				timestamp: "2026-05-02T10:01:00.000Z",
+				message: { role: "user", content: "The tool crashed." },
+			},
+		] as any, observerToolOptions);
+
+		expect(sourceEntryIds).toEqual(["assistant-call", "user-after"]);
+		expect(text).toContain("tool: fork");
+		expect(text).toContain("status: incomplete/no result");
+		expect(text).toContain("Investigate the crash");
+		expect(text).not.toContain("result:");
+	});
+
+	it("bounds long successful bash results with head, tail, and omitted line count", () => {
+		const output = Array.from({ length: 35 }, (_, i) => `line-${i + 1}`).join("\n");
+		const { text } = serializeObserverSourceEntries([
+			{
+				type: "message",
+				id: "tool-result",
+				timestamp: "2026-05-02T10:01:00.000Z",
+				message: { role: "toolResult", toolName: "bash", isError: false, content: [{ type: "text", text: output }] },
+			},
+		] as any, observerToolOptions);
+
+		expect(text).toContain("line-1");
+		expect(text).toContain("line-10");
+		expect(text).toContain("[... omitted 5 lines ...]");
+		expect(text).toContain("line-16");
+		expect(text).toContain("line-35");
+		expect(text).not.toContain("line-11\n");
 	});
 
 	it("keeps recall evidence source-oriented without exposing assistant thinking or tool-call payloads", () => {

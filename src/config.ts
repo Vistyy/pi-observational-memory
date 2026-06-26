@@ -15,7 +15,7 @@ export const STRATEGY = {
 } as const;
 export type MemoryStrategy = (typeof STRATEGY)[keyof typeof STRATEGY];
 
-export type ObserverToolOutputPolicy = "metadata-only" | "bounded-excerpt" | "full-excerpt";
+export type ObserverToolOutputPolicy = "omit" | "bounded" | "full";
 
 export interface Config {
 	strategy: MemoryStrategy;
@@ -40,7 +40,7 @@ export interface Config {
 
 export const DEFAULTS: Config = {
 	strategy: STRATEGY.replacement,
-	observeEveryMessages: 32,
+	observeEveryMessages: 8,
 	reflectEveryObservations: 8,
 	maintainEveryNewReflections: 10,
 	maintainerMaxInputReflections: 12,
@@ -83,7 +83,7 @@ function isMemoryStrategy(value: unknown): value is MemoryStrategy {
 }
 
 function isObserverToolOutputPolicy(value: unknown): value is ObserverToolOutputPolicy {
-	return value === "metadata-only" || value === "bounded-excerpt" || value === "full-excerpt";
+	return value === "omit" || value === "bounded" || value === "full";
 }
 
 function normalizeObserverToolOutputPolicies(value: unknown): Record<string, ObserverToolOutputPolicy> | undefined {
