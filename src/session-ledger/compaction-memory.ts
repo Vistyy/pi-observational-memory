@@ -1,5 +1,5 @@
-import { activeReflections } from "./active-memory.js";
-import { OM_FOLDED, type Entry, type MemoryDetails, type Observation, type Reflection } from "./types.js";
+import { foldLedger } from "./fold.js";
+import { OM_CHECKPOINT, type Checkpoint, type CheckpointMemoryDetails, type Entry } from "./types.js";
 
 export type CompactionMemoryConfig = {
 	compactionHandoffObservationMaxCount?: number;
@@ -7,39 +7,23 @@ export type CompactionMemoryConfig = {
 };
 
 export type CompactionMemory = {
-	reflections: Reflection[];
-	handoffObservations: Observation[];
-	details: MemoryDetails;
+	checkpoint?: Checkpoint;
+	details?: CheckpointMemoryDetails;
 };
 
-function capCompactionHandoffObservations(observations: Observation[], config: CompactionMemoryConfig): Observation[] {
-	const maxCount = config.compactionHandoffObservationMaxCount ?? 8;
-	const maxTokens = config.compactionHandoffObservationMaxTokens ?? 1_000;
-	const handoff: Observation[] = [];
-	let tokens = 0;
-	for (const observation of observations.slice(0, maxCount)) {
-		const nextTokens = Math.ceil(observation.content.length / 4);
-		if (handoff.length > 0 && tokens + nextTokens > maxTokens) break;
-		handoff.push(observation);
-		tokens += nextTokens;
-	}
-	return handoff;
-}
-
-function detailsFor(reflections: Reflection[]): MemoryDetails {
-	return { type: OM_FOLDED, reflections };
+function detailsFor(checkpoint: Checkpoint | undefined, coversUpToObservationId: string | undefined): CheckpointMemoryDetails | undefined {
+	if (!checkpoint) return undefined;
+	return { type: OM_CHECKPOINT, checkpoint, coversUpToObservationId };
 }
 
 export function buildCompactionMemory(
 	entries: Entry[],
-	config: CompactionMemoryConfig,
-	options: { compactionHandoffObservations?: Observation[] } = {},
+	_config: CompactionMemoryConfig,
+	_options: unknown = {},
 ): CompactionMemory {
-	const reflections = activeReflections(entries);
-	const handoffObservations = capCompactionHandoffObservations(options.compactionHandoffObservations ?? [], config);
+	const folded = foldLedger(entries);
 	return {
-		reflections,
-		handoffObservations,
-		details: detailsFor(reflections),
+		checkpoint: folded.checkpoint,
+		details: detailsFor(folded.checkpoint, folded.lastCheckpointCoverageObservationId),
 	};
 }

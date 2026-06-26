@@ -4,6 +4,8 @@ import type { ExtensionContext, SessionBeforeCompactEvent } from "@earendil-work
 import { registerCompactionHook } from "../src/hooks/compaction-hook.js";
 import type { Runtime } from "../src/runtime.js";
 import {
+	checkpoint,
+	checkpointRecordedEntry,
 	compactionEntry,
 	memoryDetails,
 	observation,
@@ -19,8 +21,9 @@ type OmCompactionResult = {
 	cancel?: boolean;
 	compaction?: {
 		summary: string;
-		details: {
-			reflections: Array<{ id: string }>;
+		details?: {
+			type: string;
+			checkpoint?: { id: string };
 		};
 	};
 };
@@ -65,7 +68,7 @@ describe("compaction hook", () => {
 		await expect(setup({ entries, strategy: "off" }).run("raw-1")).resolves.toBeUndefined();
 	});
 
-	it("returns valid empty om.folded details when there is no memory", async () => {
+	it("returns empty summary when there is no checkpoint", async () => {
 		const entries = [textCustomMessage("raw-1", "aaaa")];
 		const { run, runtime, pi } = setup({ entries });
 
@@ -76,10 +79,7 @@ describe("compaction hook", () => {
 				firstKeptEntryId: "raw-1",
 				tokensBefore: 123,
 				summary: "",
-				details: {
-					type: "om.folded",
-					reflections: [],
-				},
+				details: undefined,
 			},
 		});
 		expect(runtime.resolveModel).not.toHaveBeenCalled();
@@ -87,24 +87,24 @@ describe("compaction hook", () => {
 		expect(runtime.compactHookInFlight).toBe(false);
 	});
 
-	it("renders active reflections only", async () => {
+	it("renders the current checkpoint", async () => {
 		const obs1 = observation("aaaaaaaaaaaa", { sourceEntryIds: ["raw-1"] });
-		const ref1 = reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"]);
+		const check = checkpoint("cccccccccccc", { content: checkpoint("cccccccccccc").content.replace("None known.", "Ship checkpoint compaction.") });
 		const entries = [
 			textCustomMessage("raw-1", "aaaa"),
 			observationsRecordedEntry("om-aaaaaaaaaaaa", { observations: [obs1], coversUpToId: "raw-1" }),
-			reflectionsRecordedEntry("om-eeeeeeeeeeee", { reflections: [ref1], coversUpToId: "raw-1" }),
+			checkpointRecordedEntry("om-check", { checkpoint: check, coversUpToObservationId: obs1.id, observationIds: [obs1.id] }),
 		];
 		const { run } = setup({ entries });
 
 		const result = await run("raw-1");
 
-		expect(result.compaction?.details.reflections.map((ref) => ref.id)).toEqual(["ref_eeeeeeeeeeee"]);
-		expect(result.compaction?.summary).toContain("## Reflections\n[ref_eeeeeeeeeeee]");
-		expect(result.compaction?.summary).not.toContain("## Observations");
+		expect(result.compaction?.details).toMatchObject({ type: "om.checkpoint", checkpoint: { id: "check_cccccccccccc" } });
+		expect(result.compaction?.summary).toContain("The checkpoint below is the current handoff core.");
+		expect(result.compaction?.summary).toContain("Ship checkpoint compaction.");
 	});
 
-	it("merges previous compaction details with new reflections", async () => {
+	it("ignores old reflection compaction details for checkpoint compaction", async () => {
 		const obs1 = observation("aaaaaaaaaaaa");
 		const obs2 = observation("bbbbbbbbbbbb");
 		const ref1 = reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"]);
@@ -122,11 +122,8 @@ describe("compaction hook", () => {
 
 		const result = await run("raw-2");
 
-		expect(result.compaction?.details).toMatchObject({ type: "om.folded" });
-		expect(result.compaction?.details.reflections.map((ref) => ref.id)).toEqual(["ref_eeeeeeeeeeee", "ref_ffffffffffff"]);
-		expect(result.compaction?.summary).toContain("## Reflections\n[ref_eeeeeeeeeeee]");
-		expect(result.compaction?.summary).toContain("[ref_ffffffffffff]");
-		expect(result.compaction?.summary).not.toContain("## Observations");
+		expect(result.compaction?.details).toBeUndefined();
+		expect(result.compaction?.summary).toBe("");
 	});
 
 	it("does not wait for worker promises or call model resolution", async () => {
@@ -138,7 +135,7 @@ describe("compaction hook", () => {
 			new Promise((_, reject) => setTimeout(() => reject(new Error("timed out")), 50)),
 		]);
 
-		expect(result).toMatchObject({ compaction: { details: { type: "om.folded" } } });
+		expect(result).toMatchObject({ compaction: { summary: "", details: undefined } });
 		expect(runtime.resolveModel).not.toHaveBeenCalled();
 	});
 

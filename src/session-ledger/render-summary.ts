@@ -1,6 +1,11 @@
-import type { Observation, Reflection } from "./types.js";
+import type { Checkpoint, Observation, Reflection } from "./types.js";
 
-const CONTEXT_USAGE_INSTRUCTIONS = `These are condensed memories from earlier in this session.
+const CHECKPOINT_CONTEXT_USAGE_INSTRUCTIONS = `These are condensed memories from earlier in this session.
+
+The checkpoint below is the current handoff core.
+It should be treated as current session memory unless the recent tail or user request supersedes it.`;
+
+const LEGACY_CONTEXT_USAGE_INSTRUCTIONS = `These are condensed memories from earlier in this session.
 
 - Reflections: stable, long-lived facts about the user, project, decisions, and constraints. Reflection lines include ids in brackets.
 
@@ -18,10 +23,15 @@ export function reflectionToSummaryLine(reflection: Reflection): string {
 	return `[${reflection.id}] ${reflection.content}`;
 }
 
+export function renderCheckpointSummary(checkpoint: Checkpoint | undefined): string {
+	if (!checkpoint) return "";
+	return `${CHECKPOINT_CONTEXT_USAGE_INSTRUCTIONS}\n\n${checkpoint.content}`;
+}
+
 export function renderSummary(reflections: Reflection[], compactionHandoffObservations: Observation[] = []): string {
 	if (reflections.length === 0 && compactionHandoffObservations.length === 0) return "";
 
-	const sections = [CONTEXT_USAGE_INSTRUCTIONS];
+	const sections = [LEGACY_CONTEXT_USAGE_INSTRUCTIONS];
 	if (reflections.length > 0) sections.push(`## Reflections\n${reflections.map(reflectionToSummaryLine).join("\n")}`);
 	if (compactionHandoffObservations.length > 0) {
 		sections.push(`## Compaction handoff observations\nThese facts were extracted from source turns that compaction removed before they were reflected. They are temporary bridge context until the reflector catches up.\n${compactionHandoffObservations.map(observationToSummaryLine).join("\n")}`);

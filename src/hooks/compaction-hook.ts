@@ -3,7 +3,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { STRATEGY } from "../config.js";
 import { ensureObservedBeforeCompaction } from "../memory-update/compaction.js";
 import type { Runtime } from "../runtime.js";
-import { buildCompactionMemory, renderSummary, type Entry } from "../session-ledger/index.js";
+import { buildCompactionMemory, renderCheckpointSummary, type Entry } from "../session-ledger/index.js";
 
 const COMPACTION_HANDOFF_OBSERVATION_MAX_COUNT = 8;
 const COMPACTION_HANDOFF_OBSERVATION_MAX_TOKENS = 1_000;
@@ -37,7 +37,7 @@ export function registerCompactionHook(pi: ExtensionAPI, runtime: Runtime): void
 				},
 				{ compactionHandoffObservations },
 			);
-			const summary = renderSummary(memory.reflections, memory.handoffObservations);
+			const summary = renderCheckpointSummary(memory.checkpoint);
 
 			return {
 				compaction: {

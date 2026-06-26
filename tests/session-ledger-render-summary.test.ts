@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { renderSummary } from "../src/session-ledger/index.js";
-import { observation, reflection } from "./fixtures/session.js";
+import { renderCheckpointSummary, renderSummary } from "../src/session-ledger/index.js";
+import { checkpoint, observation, reflection } from "./fixtures/session.js";
 
 describe("session-ledger summary rendering", () => {
 	it("renders empty memory as an empty summary", () => {
@@ -15,6 +15,16 @@ describe("session-ledger summary rendering", () => {
 
 		expect(summary).toContain("These are condensed memories from earlier in this session.");
 		expect(summary).toContain("use the recall tool");
+	});
+
+	it("renders checkpoint summaries as current handoff core", () => {
+		const check = checkpoint("cccccccccccc", { content: checkpoint("cccccccccccc").content.replace("None known.", "Continue checkpoint migration.") });
+
+		const summary = renderCheckpointSummary(check);
+
+		expect(summary).toContain("The checkpoint below is the current handoff core.");
+		expect(summary).toContain("Continue checkpoint migration.");
+		expect(summary).not.toContain("Reflections:");
 	});
 
 	it("renders active reflections with typed ids", () => {

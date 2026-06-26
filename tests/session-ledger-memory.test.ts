@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { activeReflections } from "../src/session-ledger/active-memory.js";
 import { buildCompactionMemory } from "../src/session-ledger/compaction-memory.js";
-import { compactionEntry, memoryDetails, observation, observationsRecordedEntry, reflection, reflectionsRecordedEntry, reflectionsRewrittenEntry, rawMessage } from "./fixtures/session.js";
+import { checkpoint, checkpointRecordedEntry, compactionEntry, memoryDetails, observation, observationsRecordedEntry, reflection, reflectionsRecordedEntry, reflectionsRewrittenEntry, rawMessage } from "./fixtures/session.js";
 
 describe("session-ledger active and compaction memory", () => {
 	it("active reflections merge folded compaction details and current ledger reflections", () => {
@@ -30,32 +30,16 @@ describe("session-ledger active and compaction memory", () => {
 		expect(activeReflections(entries).map((ref) => ref.id)).toEqual([newRef.id]);
 	});
 
-	it("compaction memory stores active reflections in details", () => {
+	it("compaction memory stores the latest checkpoint in details", () => {
 		const obs = observation("aaaaaaaaaaaa");
-		const ref = reflection("eeeeeeeeeeee", [obs.id]);
+		const check = checkpoint("cccccccccccc");
 		const memory = buildCompactionMemory([
 			rawMessage("raw-1", "source"),
 			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
-			reflectionsRecordedEntry("om-ref", { reflections: [ref], coversUpToId: "raw-1" }),
+			checkpointRecordedEntry("om-check", { checkpoint: check, coversUpToObservationId: obs.id, observationIds: [obs.id] }),
 		], {});
 
-		expect(memory.handoffObservations).toEqual([]);
-		expect(memory.reflections).toEqual([ref]);
-		expect(memory.details.reflections).toEqual([ref]);
-	});
-
-	it("compaction memory can include only bounded handoff observations", () => {
-		const oldObs = observation("aaaaaaaaaaaa");
-		const tailA = observation("bbbbbbbbbbbb", { content: "Tail A" });
-		const tailB = observation("cccccccccccc", { content: "Tail B" });
-		const ref = reflection("eeeeeeeeeeee", [oldObs.id]);
-		const memory = buildCompactionMemory([
-			rawMessage("raw-1", "source"),
-			observationsRecordedEntry("om-obs", { observations: [oldObs], coversUpToId: "raw-1" }),
-			reflectionsRecordedEntry("om-ref", { reflections: [ref], coversUpToId: "raw-1" }),
-		], { compactionHandoffObservationMaxCount: 1 }, { compactionHandoffObservations: [tailA, tailB] });
-
-		expect(memory.handoffObservations).toEqual([tailA]);
-		expect(memory.details.reflections).toEqual([ref]);
+		expect(memory.checkpoint).toEqual(check);
+		expect(memory.details).toEqual({ type: "om.checkpoint", checkpoint: check, coversUpToObservationId: obs.id });
 	});
 });
