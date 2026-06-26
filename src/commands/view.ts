@@ -1,14 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { Runtime } from "../runtime.js";
-import {
-	activeReflections,
-	foldLedger,
-	observationToSummaryLine,
-	reflectionToSummaryLine,
-	type Entry,
-	type Observation,
-	type Reflection,
-} from "../session-ledger/index.js";
+import { foldLedger, observationToSummaryLine, type Entry } from "../session-ledger/index.js";
 
 function firstArg(args: unknown): string | undefined {
 	if (Array.isArray(args)) return typeof args[0] === "string" ? args[0] : undefined;
@@ -20,29 +12,18 @@ function firstArg(args: unknown): string | undefined {
 	return undefined;
 }
 
-function renderList<T>(items: T[], render: (item: T) => string, empty: string): string {
-	return items.length > 0 ? items.map(render).join("\n") : empty;
-}
-
-function renderContentOnlyMemory(memory: { reflections: Reflection[]; observations: Observation[] }, emptyScope: "context" | "recorded"): string {
-	return [
-		"── Reflections ──",
-		renderList(memory.reflections, reflectionToSummaryLine, `No ${emptyScope} reflections.`),
-		"",
-		"── Observations ──",
-		renderList(memory.observations, observationToSummaryLine, `No ${emptyScope} observations.`),
-	].join("\n");
-}
-
 export async function runViewCommand(args: unknown, ctx: any, runtime: Runtime): Promise<void> {
 	runtime.ensureConfig(ctx.cwd);
 	const entries = ctx.sessionManager.getBranch() as Entry[];
+	const folded = foldLedger(entries);
 	const mode = firstArg(args);
 
 	const notifyView = (output: string) => ctx.ui.notify(output, "info");
 
 	if (mode === "recorded") {
-		notifyView(renderContentOnlyMemory(foldLedger(entries), "recorded"));
+		notifyView(folded.observations.length > 0
+			? folded.observations.map(observationToSummaryLine).join("\n")
+			: "No recorded observations.");
 		return;
 	}
 
@@ -51,12 +32,12 @@ export async function runViewCommand(args: unknown, ctx: any, runtime: Runtime):
 		return;
 	}
 
-	notifyView(renderContentOnlyMemory({ reflections: activeReflections(entries), observations: [] }, "context"));
+	notifyView(folded.checkpoint?.content ?? "No checkpoint recorded.");
 }
 
 export function registerViewCommand(pi: ExtensionAPI, runtime: Runtime): void {
 	pi.registerCommand("om:view", {
-		description: "Print observational memory context (context by default, recorded on request)",
+		description: "Print observational memory checkpoint content",
 		handler: async (args, ctx) => runViewCommand(args, ctx, runtime),
 	});
 }

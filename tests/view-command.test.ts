@@ -3,12 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { registerViewCommand } from "../src/commands/view.js";
 import type { Runtime } from "../src/runtime.js";
 import {
-	compactionEntry,
-	memoryDetails,
+	checkpoint,
+	checkpointRecordedEntry,
 	observation,
 	observationsRecordedEntry,
-	reflection,
-	reflectionsRecordedEntry,
 	textCustomMessage,
 	type TestEntry,
 } from "./fixtures/session.js";
@@ -33,48 +31,34 @@ function setup(entries: TestEntry[]) {
 }
 
 describe("/om:view", () => {
-	it("renders no-memory context output as content-only sections", async () => {
+	it("renders no-checkpoint output", async () => {
 		const { output } = await setup([]).run();
-		const expected = [
-			"── Reflections ──",
-			"No context reflections.",
-			"",
-			"── Observations ──",
-			"No context observations.",
-		].join("\n");
 
-		expect(output).toBe(expected);
+		expect(output).toBe("No checkpoint recorded.");
 	});
 
-	it("default view renders latest context om.folded memory content only", async () => {
+	it("default view renders latest checkpoint Markdown", async () => {
 		const obs = observation("aaaaaaaaaaaa");
-		const ref = reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"]);
+		const check = checkpoint("cccccccccccc", { content: checkpoint("cccccccccccc").content.replace("None known.", "Continue checkpoint migration.") });
 		const entries = [
 			textCustomMessage("raw-1", "aaaa"),
-			observationsRecordedEntry("om-obs", { observations: [observation("bbbbbbbbbbbb")], coversUpToId: "raw-1" }),
-			compactionEntry("cmp", { firstKeptEntryId: "raw-1", details: memoryDetails({ reflections: [ref] }) }),
+			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
+			checkpointRecordedEntry("om-check", { checkpoint: check, coversUpToObservationId: obs.id, observationIds: [obs.id] }),
 		];
 
 		const { output } = await setup(entries).run();
 
-		expect(output).toContain("── Reflections ──");
-		expect(output).toContain("[ref_eeeeeeeeeeee] Reflection eeeeeeeeeeee");
-		expect(output).toContain("── Observations ──");
-		expect(output).toContain("No context observations.");
-		expect(output).not.toContain("obs_bbbbbbbbbbbb");
+		expect(output).toBe(check.content);
+		expect(output).toContain("Continue checkpoint migration.");
 	});
 
-	it("recorded view renders recorded empty states", async () => {
-		const { output } = await setup([]).run("recorded");
-		const expected = [
-			"── Reflections ──",
-			"No recorded reflections.",
-			"",
-			"── Observations ──",
-			"No recorded observations.",
-		].join("\n");
+	it("recorded view renders recorded observations", async () => {
+		const obs = observation("aaaaaaaaaaaa");
+		const { output } = await setup([
+			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
+		]).run("recorded");
 
-		expect(output).toBe(expected);
+		expect(output).toContain("[obs_aaaaaaaaaaaa]");
 	});
 
 	it("rejects unsupported view arguments", async () => {

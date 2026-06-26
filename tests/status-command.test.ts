@@ -4,12 +4,11 @@ import { registerStatusCommand } from "../src/commands/status.js";
 import type { Runtime } from "../src/runtime.js";
 import { PI_USAGE_RECORDED } from "../src/usage.js";
 import {
-	compactionEntry,
-	memoryDetails,
+	checkpoint,
+	checkpointCoverageAdvancedEntry,
+	checkpointRecordedEntry,
 	observation,
 	observationsRecordedEntry,
-	reflection,
-	reflectionsRecordedEntry,
 	textCustomMessage,
 	type TestEntry,
 } from "./fixtures/session.js";
@@ -25,7 +24,8 @@ function setup(args: { entries: TestEntry[]; runtime?: Partial<Runtime> }) {
 		ensureConfig: vi.fn(),
 		config: {
 			strategy: "replacement",
-			observeEveryMessages: 10,
+			observeEveryMessages: 8,
+			observeHardCapRecords: 32,
 			reflectEveryObservations: 20,
 			maintainEveryNewReflections: 10,
 			reflectionsPoolMaxTokens: 30,
@@ -34,6 +34,7 @@ function setup(args: { entries: TestEntry[]; runtime?: Partial<Runtime> }) {
 		memoryUpdatePhase: undefined,
 		compactHookInFlight: false,
 		lastObserverError: undefined,
+		lastCheckpointEditorError: undefined,
 		lastReflectorError: undefined,
 		lastMaintainerError: undefined,
 		lastMaintainerSkip: undefined,
@@ -52,46 +53,42 @@ function setup(args: { entries: TestEntry[]; runtime?: Partial<Runtime> }) {
 }
 
 describe("/om:status", () => {
-	it("renders concise default status", async () => {
+	it("renders concise checkpoint status", async () => {
 		const output = await setup({ entries: [] }).run();
 
-		expect(output).toContain("── Memory ──");
-		expect(output).toContain("Context:      0 reflections");
-		expect(output).not.toContain("Next context:");
-		expect(output).toContain("Size:         ~0 context tokens; active reflections ~0 / 30 budget tokens");
-		expect(output).toContain("Observe: 0 / 10 source entries");
-		expect(output).toContain("Reflect: 0 / 20 observations");
-		expect(output).toContain("Maintain: 0 / 10 new reflections");
-		expect(output).toContain("Rewrite: ~0 / 30 active-reflection tokens");
+		expect(output).toContain("── Checkpoint ──");
+		expect(output).toContain("Current:      none");
+		expect(output).toContain("Observe gap:    0 source entries");
+		expect(output).toContain("Checkpoint gap: 0 observations");
 		expect(output).not.toContain("Strategy:");
 	});
 
-	it("shows context and progress clocks", async () => {
-		const obs = observation("aaaaaaaaaaaa");
-		const ref = reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"]);
+	it("shows checkpoint coverage and gaps", async () => {
+		const obsA = observation("aaaaaaaaaaaa");
+		const obsB = observation("bbbbbbbbbbbb", { sourceEntryIds: ["raw-2"] });
+		const check = checkpoint("cccccccccccc");
 		const entries = [
 			textCustomMessage("raw-1", "aaaaaaaa"),
-			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
-			reflectionsRecordedEntry("om-ref", { reflections: [ref], coversUpToId: "raw-1" }),
 			textCustomMessage("raw-2", "bbbbbbbb"),
-			compactionEntry("cmp", { firstKeptEntryId: "raw-2", details: memoryDetails({ reflections: [ref] }) }),
+			observationsRecordedEntry("om-obs", { observations: [obsA, obsB], coversUpToId: "raw-2" }),
+			checkpointRecordedEntry("om-check", { checkpoint: check, coversUpToObservationId: obsA.id, observationIds: [obsA.id] }),
 		];
 
 		const output = await setup({ entries }).run();
 
-		expect(output).toContain("Context:      1 reflections");
-		expect(output).not.toContain("Next context:");
-		expect(output).toContain("Observe: 2 / 10 source entries");
-		expect(output).toContain("Reflect: 0 / 20 observations");
-		expect(output).toContain("Maintain: 1 / 10 new reflections");
-		expect(output).toContain("Rewrite: ~");
+		expect(output).toContain("Current:      check_cccccccccccc");
+		expect(output).toContain(`Coverage:     ${obsA.id}`);
+		expect(output).toContain("Checkpoint gap: 1 observations");
 	});
 
 	it("shows full details on request", async () => {
 		const obs = observation("aaaaaaaaaaaa");
+		const check = checkpoint("cccccccccccc");
 		const entries = [
 			textCustomMessage("raw-1", "aaaaaaaa"),
 			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
+			checkpointRecordedEntry("om-check", { checkpoint: check, coversUpToObservationId: obs.id, observationIds: [obs.id] }),
+			checkpointCoverageAdvancedEntry("om-check-coverage", { coversUpToObservationId: obs.id, observationIds: [obs.id] }),
 		];
 
 		const output = await setup({ entries }).run("full");
@@ -99,7 +96,7 @@ describe("/om:status", () => {
 		expect(output).toContain("── Details ──");
 		expect(output).toContain("Strategy: replacement");
 		expect(output).toContain("Ledger observations: 1 recorded");
-		expect(output).toContain("Source entries since reflection cursor: 1");
+		expect(output).toContain("Checkpoint versions: 1 recorded");
 	});
 
 	it("shows usage totals in full mode", async () => {
@@ -113,7 +110,7 @@ describe("/om:status", () => {
 				schemaVersion: 1,
 				source: "extension",
 				extension: "observational-memory",
-				agent: "reflector",
+				agent: "checkpoint-editor",
 				usage: { input: 100, output: 20, cacheRead: 5, cacheWrite: 0, totalTokens: 125, cost: 0.0123 },
 			},
 		};
@@ -122,21 +119,7 @@ describe("/om:status", () => {
 
 		expect(output).toContain("── Usage ──");
 		expect(output).toContain("Total: ~125 tokens, $0.0123");
-		expect(output).toContain("reflector: ~125 tokens, $0.0123");
-	});
-
-	it("shows last maintainer and rewrite skips", async () => {
-		const output = await setup({
-			entries: [],
-			runtime: {
-				lastMaintainerSkip: { reason: "no_op", reflectionCount: 10 },
-				lastRewriteSkip: { reason: "unchanged_after_noop", reflectionCount: 12, activeTokens: 96, maxTokens: 30, resultTokens: 88 },
-			},
-		}).run();
-
-		expect(output).toContain("── Last skip ──");
-		expect(output).toContain("Maintainer: no_op (10 reflections)");
-		expect(output).toContain("Rewrite: unchanged_after_noop (12 reflections, ~96 active tokens, 30 budget, result ~88 tokens)");
+		expect(output).toContain("checkpoint-editor: ~125 tokens, $0.0123");
 	});
 
 	it("rejects unsupported status arguments", async () => {
@@ -145,32 +128,23 @@ describe("/om:status", () => {
 		expect(output).toBe("Usage: /om:status [full]");
 	});
 
-	it("shows disabled config in full mode, memory update in flight, compaction hook in flight, and stage-specific last errors", async () => {
+	it("shows disabled config, in-flight state, and stage-specific last errors", async () => {
 		const output = await setup({
 			entries: [],
 			runtime: {
-				config: { strategy: "off", observeEveryMessages: 10, reflectEveryObservations: 20, maintainEveryNewReflections: 10, reflectionsPoolMaxTokens: 30 },
+				config: { strategy: "off", observeEveryMessages: 8, observeHardCapRecords: 32, reflectEveryObservations: 20, maintainEveryNewReflections: 10, reflectionsPoolMaxTokens: 30 },
 				memoryUpdateInFlight: true,
-				memoryUpdatePhase: "reflector",
+				memoryUpdatePhase: "checkpoint-editor",
 				compactHookInFlight: true,
 				lastObserverError: "observer failed",
-				lastReflectorError: "reflect failed",
-				lastMaintainerError: "maintainer failed",
+				lastCheckpointEditorError: "checkpoint failed",
 			},
 		}).run("full");
 
 		expect(output).toContain("Strategy: off");
-		expect(output).toContain("Memory update: running (reflector)");
+		expect(output).toContain("Memory update: running (checkpoint-editor)");
 		expect(output).toContain("Compaction hook: running");
 		expect(output).toContain("Observer: observer failed");
-		expect(output).toContain("Reflector: reflect failed");
-		expect(output).toContain("Maintainer: maintainer failed");
-	});
-
-	it("shows memory update in flight without phase when phase is unavailable", async () => {
-		const output = await setup({ entries: [], runtime: { memoryUpdateInFlight: true } }).run();
-
-		expect(output).toContain("Memory update: running");
-		expect(output).not.toContain("Memory update: running (");
+		expect(output).toContain("CheckpointEditor: checkpoint failed");
 	});
 });
