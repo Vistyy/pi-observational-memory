@@ -23,7 +23,7 @@ function maybeLaunchMemoryUpdate(pi: ExtensionAPI, runtime: Runtime, ctx: Memory
 
 	const entries = ctx.sessionManager.getBranch() as Entry[];
 	const work = computeMemoryStageWork(entries, runtime, trigger);
-	if (work.observerWork.length === 0 && work.reflectorWork.length === 0 && work.maintainerWork.length === 0 && work.rewriteWork.length === 0) return;
+	if (work.observerWork.length === 0 && work.checkpointWork.length === 0 && work.reflectorWork.length === 0 && work.maintainerWork.length === 0 && work.rewriteWork.length === 0) return;
 
 	const runId = `memory-update-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`;
 	const sessionMetadata = debugSessionMetadata(ctx);

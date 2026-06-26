@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockAgents = vi.hoisted(() => ({
 	runObserver: vi.fn(),
+	runCheckpointEditor: vi.fn(),
 	runReflector: vi.fn(),
 	runMaintainer: vi.fn(),
 	runRewrite: vi.fn(),
 }));
 
 vi.mock("../src/agents/observer/agent.js", () => ({ runObserver: mockAgents.runObserver }));
+vi.mock("../src/agents/checkpoint-editor/agent.js", () => ({ runCheckpointEditor: mockAgents.runCheckpointEditor }));
 vi.mock("../src/agents/reflector/agent.js", () => ({ runReflector: mockAgents.runReflector }));
 vi.mock("../src/agents/maintainer/agent.js", () => ({ runMaintainer: mockAgents.runMaintainer }));
 vi.mock("../src/agents/rewrite/agent.js", () => ({ runRewrite: mockAgents.runRewrite }));
@@ -22,6 +24,7 @@ import {
 	OM_REFLECTIONS_REWRITTEN,
 } from "../src/session-ledger/index.js";
 import {
+	checkpointCoverageAdvancedEntry,
 	observation,
 	observationsRecordedEntry,
 	reflection,
@@ -33,10 +36,12 @@ import { memoryUpdateApi, type AgentStartHandler, type MessageEndHandler, type T
 
 beforeEach(() => {
 	mockAgents.runObserver.mockReset();
+	mockAgents.runCheckpointEditor.mockReset();
 	mockAgents.runReflector.mockReset();
 	mockAgents.runMaintainer.mockReset();
 	mockAgents.runRewrite.mockReset();
 	mockAgents.runObserver.mockResolvedValue(undefined);
+	mockAgents.runCheckpointEditor.mockResolvedValue({ content: "# Checkpoint\n\n## Current objective\n\nUpdated by test.\n\n## Progress and decisions\n\nNone known.\n\n## Important context\n\nNone known.\n\n## Remaining work\n\nNone known.\n\n## References and anchors\n\nNone known.", reason: "test update", changed: true });
 	mockAgents.runReflector.mockResolvedValue(undefined);
 	mockAgents.runMaintainer.mockResolvedValue(undefined);
 	mockAgents.runRewrite.mockResolvedValue(undefined);
@@ -201,6 +206,7 @@ describe("memory update hook", () => {
 		const entries = [
 			rawMessage("raw-1", "aaaa"),
 			observationsRecordedEntry("om-obs", { observations: [obsA], coversUpToId: "raw-1" }),
+			checkpointCoverageAdvancedEntry("om-check", { coversUpToObservationId: obsA.id, observationIds: [obsA.id] }),
 			reflectionsRecordedEntry("om-ref", { reflections: [refA], coversUpToId: "raw-1" }),
 		];
 		const { fireAgentStart, fireTurnEnd, runtime } = setup({ entries, observeEveryMessages: 10, reflectEveryObservations: 10 });
@@ -356,6 +362,7 @@ describe("memory update hook", () => {
 		expect(mockAgents.runReflector).toHaveBeenCalledWith(expect.objectContaining({ observations: [obsA] }));
 		expect(getMemoryAppends()).toEqual([
 			{ customType: OM_OBSERVATIONS_RECORDED, data: { observations: [obsA], coversUpToId: "raw-1" } },
+			expect.objectContaining({ customType: "om.checkpoint.recorded" }),
 			{ customType: OM_REFLECTIONS_RECORDED, data: { reflections: [newRef], coversUpToId: "raw-1" } },
 		]);
 	});
@@ -429,7 +436,7 @@ describe("memory update hook", () => {
 		}));
 	});
 
-	it("does not launch only because the old active observation pool threshold is exceeded", async () => {
+	it("launches checkpoint update for uncheckpointed observations", async () => {
 		const entries = [
 			rawMessage("raw-1", "aaaaaaaa"),
 			observationsRecordedEntry("om-obs", { observations: [obsA], coversUpToId: "raw-1" }),
@@ -439,7 +446,8 @@ describe("memory update hook", () => {
 		fire();
 		await runLaunchedWork();
 
-		expect(runtime.launchMemoryUpdateTask).not.toHaveBeenCalled();
+		expect(runtime.launchMemoryUpdateTask).toHaveBeenCalledOnce();
+		expect(mockAgents.runCheckpointEditor).toHaveBeenCalledOnce();
 	});
 
 	it("runs maintainer after the new-reflection threshold and appends replacements plus retirements", async () => {
@@ -557,7 +565,7 @@ describe("memory update hook", () => {
 		mockAgents.runObserver.mockResolvedValue(undefined);
 		mockAgents.runReflector.mockReset();
 		mockAgents.runReflector.mockRejectedValueOnce(new Error("reflect failed"));
-		const reflectorFailure = setup({ entries: [rawMessage("raw-1", "aaaaaaaa"), observationsRecordedEntry("om-obs", { observations: [obsA], coversUpToId: "raw-1" })], observeEveryMessages: 999 });
+		const reflectorFailure = setup({ entries: [rawMessage("raw-1", "aaaaaaaa"), observationsRecordedEntry("om-obs", { observations: [obsA], coversUpToId: "raw-1" }), checkpointCoverageAdvancedEntry("om-check", { coversUpToObservationId: obsA.id, observationIds: [obsA.id] })], observeEveryMessages: 999 });
 		reflectorFailure.fire();
 		await reflectorFailure.runLaunchedWork();
 		expect(reflectorFailure.runtime.lastReflectorError).toBe("reflect failed");

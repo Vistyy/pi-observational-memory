@@ -15,6 +15,7 @@ export type MemoryUpdateTrigger = "agent_start" | "message_end" | "turn_end";
 
 export type MemoryStageWork = {
 	observerWork: Entry[];
+	checkpointWork: Observation[];
 	reflectorWork: Observation[];
 	maintainerWork: Reflection[];
 	rewriteWork: Reflection[];
@@ -61,6 +62,7 @@ export function computeMemoryStageWork(entries: Entry[], runtime: Runtime, trigg
 	const newReflectionsSinceMaintenance = reflectionsRecordedSinceLastRetirement(entries);
 	return {
 		observerWork,
+		checkpointWork: folded.uncheckpointedObservations,
 		reflectorWork: folded.unreflectedObservations.length >= runtime.config.reflectEveryObservations ? folded.unreflectedObservations : [],
 		maintainerWork: newReflectionsSinceMaintenance >= runtime.config.maintainEveryNewReflections ? folded.reflections.slice(-runtime.config.maintainerMaxInputReflections) : [],
 		rewriteWork: reflectionTokenSum(folded.reflections) >= runtime.config.reflectionsPoolMaxTokens ? folded.reflections : [],

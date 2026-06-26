@@ -7,17 +7,23 @@ import { makeModelResolver } from "./model-resolver.js";
 import type { MemoryUpdateCtx, StageOutcome } from "./types.js";
 
 type ObserverStageModule = typeof import("./observer-stage.js");
+type CheckpointStageModule = typeof import("./checkpoint-stage.js");
 type ReflectorStageModule = typeof import("./reflector-stage.js");
 type MaintainerStageModule = typeof import("./maintainer-stage.js");
 type RewriteStageModule = typeof import("./rewrite-stage.js");
 
 let observerStageModule: Promise<ObserverStageModule> | undefined;
+let checkpointStageModule: Promise<CheckpointStageModule> | undefined;
 let reflectorStageModule: Promise<ReflectorStageModule> | undefined;
 let maintainerStageModule: Promise<MaintainerStageModule> | undefined;
 let rewriteStageModule: Promise<RewriteStageModule> | undefined;
 
 function loadObserverStage(): Promise<ObserverStageModule> {
 	return observerStageModule ??= import("./observer-stage.js");
+}
+
+function loadCheckpointStage(): Promise<CheckpointStageModule> {
+	return checkpointStageModule ??= import("./checkpoint-stage.js");
 }
 
 function loadReflectorStage(): Promise<ReflectorStageModule> {
@@ -79,6 +85,22 @@ export async function runMemoryUpdate(
 			if (runtime.inFlightObserverStagePromise === observerPromise) runtime.inFlightObserverStagePromise = null;
 		}
 		if (observerOutcome === "abort") return;
+		entries = ctx.sessionManager.getBranch() as Entry[];
+		work = computeMemoryStageWork(entries, runtime, trigger);
+	}
+
+	if (work.checkpointWork.length > 0) {
+		const checkpointOutcome = await runTrackedStage(
+			pi,
+			runtime,
+			ctx,
+			"checkpoint-editor",
+			async () => {
+				const { runCheckpointStage } = await loadCheckpointStage();
+				return runCheckpointStage(pi, runtime, ctx, resolveModel, work.checkpointWork);
+			},
+		);
+		if (checkpointOutcome === "abort") return;
 		entries = ctx.sessionManager.getBranch() as Entry[];
 		work = computeMemoryStageWork(entries, runtime, trigger);
 	}

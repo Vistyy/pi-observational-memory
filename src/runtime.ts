@@ -6,7 +6,7 @@ export type ResolveResult =
 
 type NotifyLevel = "warning" | "info" | "error";
 type Notify = (message: string, type?: NotifyLevel) => void;
-export type MemoryUpdatePhase = "observer" | "reflector" | "maintainer" | "rewrite";
+export type MemoryUpdatePhase = "observer" | "checkpoint-editor" | "reflector" | "maintainer" | "rewrite";
 
 export type MaintainerSkip = {
 	reason: string;
@@ -38,6 +38,7 @@ export class Runtime {
 	compactHookInFlight = false;
 	resolveFailureNotified = false;
 	lastObserverError: string | undefined;
+	lastCheckpointEditorError: string | undefined;
 	lastReflectorError: string | undefined;
 	lastMaintainerError: string | undefined;
 	lastMaintainerSkip: MaintainerSkip | undefined;
@@ -76,6 +77,7 @@ export class Runtime {
 		this.memoryUpdateInFlight = true;
 		this.memoryUpdatePhase = undefined;
 		this.lastObserverError = undefined;
+		this.lastCheckpointEditorError = undefined;
 		this.lastReflectorError = undefined;
 		this.lastMaintainerError = undefined;
 		return this.launchTrackedTask(ctx, "memory update", work, () => {
@@ -87,6 +89,7 @@ export class Runtime {
 	recordMemoryUpdateStageError(ctx: RuntimeCtx, phase: MemoryUpdatePhase, error: unknown): string {
 		const message = error instanceof Error ? error.message : String(error);
 		if (phase === "observer") this.lastObserverError = message;
+		if (phase === "checkpoint-editor") this.lastCheckpointEditorError = message;
 		if (phase === "reflector") this.lastReflectorError = message;
 		if (phase === "maintainer") this.lastMaintainerError = message;
 		if (ctx.hasUI && ctx.ui) ctx.ui.notify(`Observational memory: ${phase} failed: ${message}`, "warning");
