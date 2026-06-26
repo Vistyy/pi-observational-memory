@@ -25,9 +25,7 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "om-agent-evals": "tsx eval/src/cli/om-agent-evals.ts",
-    "recall-use-evals": "tsx eval/src/cli/recall-use-evals.ts"
+    "test": "vitest run"
   },
   "peerDependencies": {
     "@earendil-works/pi-agent-core": "*",

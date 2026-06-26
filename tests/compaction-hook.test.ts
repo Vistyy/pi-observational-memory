@@ -6,12 +6,8 @@ import type { Runtime } from "../src/runtime.js";
 import {
 	checkpoint,
 	checkpointRecordedEntry,
-	compactionEntry,
-	memoryDetails,
 	observation,
 	observationsRecordedEntry,
-	reflection,
-	reflectionsRecordedEntry,
 	textCustomMessage,
 	type TestEntry,
 } from "./fixtures/session.js";
@@ -104,27 +100,6 @@ describe("compaction hook", () => {
 		expect(result.compaction?.summary).toContain("Ship checkpoint compaction.");
 	});
 
-	it("ignores old reflection compaction details for checkpoint compaction", async () => {
-		const obs1 = observation("aaaaaaaaaaaa");
-		const obs2 = observation("bbbbbbbbbbbb");
-		const ref1 = reflection("eeeeeeeeeeee", ["aaaaaaaaaaaa"]);
-		const ref2 = reflection("ffffffffffff", ["bbbbbbbbbbbb"]);
-		const entries = [
-			textCustomMessage("raw-1", "aaaa"),
-			observationsRecordedEntry("om-aaaaaaaaaaaa", { observations: [obs1], coversUpToId: "raw-1" }),
-			reflectionsRecordedEntry("om-eeeeeeeeeeee", { reflections: [ref1], coversUpToId: "raw-1" }),
-			compactionEntry("cmp", { firstKeptEntryId: "raw-1", details: memoryDetails({ reflections: [ref1] }) }),
-			textCustomMessage("raw-2", "bbbb"),
-			observationsRecordedEntry("om-bbbbbbbbbbbb", { observations: [obs2], coversUpToId: "raw-2" }),
-			reflectionsRecordedEntry("om-ffffffffffff", { reflections: [ref2], coversUpToId: "raw-2" }),
-		];
-		const { run } = setup({ entries });
-
-		const result = await run("raw-2");
-
-		expect(result.compaction?.details).toBeUndefined();
-		expect(result.compaction?.summary).toBe("");
-	});
 
 	it("does not wait for worker promises or call model resolution", async () => {
 		const entries = [textCustomMessage("raw-1", "aaaa")];

@@ -1,12 +1,9 @@
 export const OM_OBSERVATIONS_RECORDED = "om.observations.recorded";
-export const OM_REFLECTIONS_RECORDED = "om.reflections.recorded";
-export const OM_REFLECTIONS_REWRITTEN = "om.reflections.rewritten";
 export const OM_CHECKPOINT_RECORDED = "om.checkpoint.recorded";
 export const OM_CHECKPOINT_COVERAGE_ADVANCED = "om.checkpoint.coverage_advanced";
 export const OM_CHECKPOINT = "om.checkpoint";
-export const OM_FOLDED = "om.folded";
 
-import { checkpointId, isCheckpointId, isLegacyMemoryId, isObservationId, isReflectionId, observationId, reflectionId } from "../memory/ids.js";
+import { checkpointId, isCheckpointId, isLegacyMemoryId, isObservationId, observationId } from "../memory/ids.js";
 
 export type Entry = {
 	type: string;
@@ -30,15 +27,8 @@ export type MemoryRecordBase = {
 
 export type Observation = MemoryRecordBase & {
 	kind: "observation";
-	/** Observation event time. Kept separately while prompts/status still render observation timestamps. */
 	timestamp: string;
-	/** Source ledger entry ids. */
 	sourceEntryIds: string[];
-};
-
-export type Reflection = MemoryRecordBase & {
-	kind: "reflection";
-	sources: string[];
 };
 
 export type Checkpoint = {
@@ -66,21 +56,6 @@ export type ObservationsRecordedEntryData = {
 	coversUpToId: string;
 };
 
-export type ReflectionsRecordedEntryData = {
-	reflections: Reflection[];
-	coversUpToId: string;
-};
-
-export type ReflectionsRewrittenEntryData = {
-	retiredReflectionIds: string[];
-	summary?: string;
-};
-
-export type MemoryDetails = {
-	type: typeof OM_FOLDED;
-	reflections: Reflection[];
-};
-
 export type CheckpointMemoryDetails = {
 	type: typeof OM_CHECKPOINT;
 	checkpoint: Checkpoint;
@@ -89,8 +64,6 @@ export type CheckpointMemoryDetails = {
 
 export type MemoryCustomType =
 	| typeof OM_OBSERVATIONS_RECORDED
-	| typeof OM_REFLECTIONS_RECORDED
-	| typeof OM_REFLECTIONS_REWRITTEN
 	| typeof OM_CHECKPOINT_RECORDED
 	| typeof OM_CHECKPOINT_COVERAGE_ADVANCED;
 
@@ -103,15 +76,11 @@ export function isNonEmptyStringArray(value: unknown): value is string[] {
 }
 
 export function isMemoryId(value: unknown): value is string {
-	return isLegacyMemoryId(value) || isObservationId(value) || isReflectionId(value);
+	return isLegacyMemoryId(value) || isObservationId(value);
 }
 
 export function isCheckpointRecordId(value: unknown): value is string {
 	return isCheckpointId(value);
-}
-
-function isTokenCount(value: unknown): value is number {
-	return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -138,30 +107,6 @@ export function normalizeObservation(value: unknown): Observation | undefined {
 
 export function isObservation(value: unknown): value is Observation {
 	return !!normalizeObservation(value);
-}
-
-export function normalizeReflection(value: unknown, createdAt: string): Reflection | undefined {
-	if (!isPlainRecord(value)) return undefined;
-	if (!isMemoryId(value.id) || !isNonEmptyString(value.content) || /\r|\n/.test(value.content)) return undefined;
-	const rawSources = isNonEmptyStringArray(value.sources)
-		? value.sources
-		: isNonEmptyStringArray(value.supportingObservationIds)
-			? value.supportingObservationIds.map(observationId)
-			: undefined;
-	if (!rawSources) return undefined;
-	const sources = rawSources.map((source) => isLegacyMemoryId(source) ? observationId(source) : source);
-	if (!sources.every((source) => isObservationId(source) || isReflectionId(source))) return undefined;
-	return {
-		id: reflectionId(value.id),
-		kind: "reflection",
-		content: value.content,
-		sources,
-		createdAt: isNonEmptyString(value.createdAt) ? value.createdAt : createdAt,
-	};
-}
-
-export function isReflection(value: unknown): value is Reflection {
-	return !!normalizeReflection(value, "1970-01-01T00:00:00.000Z");
 }
 
 const REQUIRED_CHECKPOINT_HEADINGS = [
@@ -234,33 +179,6 @@ export function isObservationsRecordedData(value: unknown): value is Observation
 	return !!normalizeObservationsRecordedData(value);
 }
 
-export function normalizeReflectionsRecordedData(value: unknown, createdAt: string): ReflectionsRecordedEntryData | undefined {
-	if (!isPlainRecord(value) || !Array.isArray(value.reflections) || !isNonEmptyString(value.coversUpToId)) return undefined;
-	const reflections = value.reflections.map((reflection) => normalizeReflection(reflection, createdAt));
-	if (reflections.some((reflection) => !reflection)) return undefined;
-	return { reflections: reflections as Reflection[], coversUpToId: value.coversUpToId };
-}
-
-export function isReflectionsRecordedData(value: unknown): value is ReflectionsRecordedEntryData {
-	return !!normalizeReflectionsRecordedData(value, "1970-01-01T00:00:00.000Z");
-}
-
-export function isReflectionsRewrittenData(value: unknown): value is ReflectionsRewrittenEntryData {
-	if (!isPlainRecord(value)) return false;
-	return isNonEmptyStringArray(value.retiredReflectionIds) && (value.summary === undefined || isNonEmptyString(value.summary));
-}
-
-export function isMemoryDetails(value: unknown): value is MemoryDetails {
-	if (!isPlainRecord(value)) return false;
-	return (
-		value.type === OM_FOLDED &&
-		(value.fullFold === undefined || typeof value.fullFold === "boolean") &&
-		(value.observations === undefined || (Array.isArray(value.observations) && value.observations.every(isObservation))) &&
-		Array.isArray(value.reflections) &&
-		value.reflections.every(isReflection)
-	);
-}
-
 export function isCheckpointMemoryDetails(value: unknown): value is CheckpointMemoryDetails {
 	if (!isPlainRecord(value)) return false;
 	return (
@@ -276,22 +194,6 @@ export function isObservationsRecordedEntry(entry: Entry): entry is Entry & {
 	data: ObservationsRecordedEntryData;
 } {
 	return entry.type === "custom" && entry.customType === OM_OBSERVATIONS_RECORDED && isObservationsRecordedData(entry.data);
-}
-
-export function isReflectionsRecordedEntry(entry: Entry): entry is Entry & {
-	type: "custom";
-	customType: typeof OM_REFLECTIONS_RECORDED;
-	data: ReflectionsRecordedEntryData;
-} {
-	return entry.type === "custom" && entry.customType === OM_REFLECTIONS_RECORDED && isReflectionsRecordedData(entry.data);
-}
-
-export function isReflectionsRewrittenEntry(entry: Entry): entry is Entry & {
-	type: "custom";
-	customType: typeof OM_REFLECTIONS_REWRITTEN;
-	data: ReflectionsRewrittenEntryData;
-} {
-	return entry.type === "custom" && entry.customType === OM_REFLECTIONS_REWRITTEN && isReflectionsRewrittenData(entry.data);
 }
 
 export function isCheckpointRecordedEntry(entry: Entry): entry is Entry & {
@@ -318,20 +220,6 @@ export function buildObservationsRecordedData(
 	return { observations, coversUpToId };
 }
 
-export function buildReflectionsRecordedData(
-	reflections: Reflection[],
-	coversUpToId: string,
-): ReflectionsRecordedEntryData | undefined {
-	if (!isNonEmptyString(coversUpToId)) return undefined;
-	return { reflections, coversUpToId };
-}
-
-export function buildReflectionsRewrittenData(
-	data: ReflectionsRewrittenEntryData,
-): ReflectionsRewrittenEntryData | undefined {
-	return isReflectionsRewrittenData(data) ? data : undefined;
-}
-
 export function buildCheckpointRecordedData(data: CheckpointRecordedEntryData): CheckpointRecordedEntryData | undefined {
 	return normalizeCheckpointRecordedData(data);
 }
@@ -339,4 +227,3 @@ export function buildCheckpointRecordedData(data: CheckpointRecordedEntryData): 
 export function buildCheckpointCoverageAdvancedData(data: CheckpointCoverageAdvancedEntryData): CheckpointCoverageAdvancedEntryData | undefined {
 	return normalizeCheckpointCoverageAdvancedData(data);
 }
-

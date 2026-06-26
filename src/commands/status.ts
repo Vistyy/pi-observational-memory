@@ -105,12 +105,10 @@ export async function runStatusCommand(args: unknown, ctx: any, runtime: Runtime
 		if (runtime.compactHookInFlight) lines.push("Compaction hook: running");
 	}
 
-	if (runtime.lastObserverError || runtime.lastCheckpointEditorError || runtime.lastReflectorError || runtime.lastMaintainerError) {
+	if (runtime.lastObserverError || runtime.lastCheckpointEditorError) {
 		lines.push("", "── Last error ──");
 		if (runtime.lastObserverError) lines.push(`Observer: ${runtime.lastObserverError}`);
 		if (runtime.lastCheckpointEditorError) lines.push(`CheckpointEditor: ${runtime.lastCheckpointEditorError}`);
-		if (runtime.lastReflectorError) lines.push(`Reflector: ${runtime.lastReflectorError}`);
-		if (runtime.lastMaintainerError) lines.push(`Maintainer: ${runtime.lastMaintainerError}`);
 	}
 
 	ctx.ui.notify(lines.join("\n"), "info");

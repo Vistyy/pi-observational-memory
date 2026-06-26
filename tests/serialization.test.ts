@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { serializeObserverSourceEntries, type ObserverToolRenderingOptions } from "../src/memory/serialization/observer.js";
-import { renderRecallSourceEntry } from "../src/memory/serialization/recall.js";
 
 const observerToolOptions: ObserverToolRenderingOptions = {
 	toolResultSummaryMaxLines: 4,
@@ -180,7 +179,7 @@ describe("memory serialization", () => {
 
 	it("bounds configured fork tool output while preserving head and tail", () => {
 		const realGigaForkHead = "Now I have a thorough understanding of the full codebase. Here is my triage report. B1. Additive cross-compaction memory gap in src/hooks/additive-context.ts.";
-		const realGigaForkTail = "Recommended order: fix compaction gap first, then soften observation cleanup, then add recall evals. End of triage report.";
+		const realGigaForkTail = "Recommended order: fix compaction gap first, then tune observer records, then add checkpoint evals. End of triage report.";
 		const output = `${realGigaForkHead}\n${"middle noise\n".repeat(1000)}${realGigaForkTail}`;
 		const { text } = serializeObserverSourceEntries([
 			{
@@ -195,7 +194,7 @@ describe("memory serialization", () => {
 		expect(text).toContain("Additive cross-compaction memory gap");
 		expect(text).toContain("src/hooks/additive-context.ts");
 		expect(text).toContain("fix compaction gap first");
-		expect(text).toContain("add recall evals");
+		expect(text).toContain("add checkpoint evals");
 		expect(text).not.toContain("truncated middle");
 		expect((text.match(/middle noise/g) ?? []).length).toBe(1000);
 	});
@@ -295,27 +294,4 @@ describe("memory serialization", () => {
 		expect(text).not.toContain("line-11\n");
 	});
 
-	it("keeps recall evidence source-oriented without exposing assistant thinking or tool-call payloads", () => {
-		const entry = {
-			type: "message",
-			id: "assistant-1",
-			timestamp: "2026-05-02T10:00:00.000Z",
-			message: {
-				role: "assistant",
-				timestamp: 1777716000000,
-				content: [
-					{ type: "thinking", thinking: "Internal rationale." },
-					{ type: "text", text: "Visible answer." },
-					{ type: "toolCall", name: "edit", arguments: { path: "secret.txt" } },
-				],
-			},
-		};
-
-		const rendered = renderRecallSourceEntry(entry as any);
-		expect(rendered).toContain("[thinking omitted]");
-		expect(rendered).toContain("Visible answer.");
-		expect(rendered).not.toContain("Internal rationale.");
-		expect(rendered).not.toContain("secret.txt");
-		expect(rendered).not.toContain("edit(");
-	});
 });

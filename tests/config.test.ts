@@ -39,20 +39,13 @@ describe("config", () => {
 			strategy: STRATEGY.replacement,
 			observeEveryMessages: 8,
 			observeHardCapRecords: 32,
-			reflectEveryObservations: 8,
-			maintainEveryNewReflections: 10,
-			maintainerMaxInputReflections: 12,
 			maxInitialObserveTokens: 100000,
-			reflectionsPoolMaxTokens: 8000,
 			observerToolResultSummaryMaxLines: 4,
 			observerToolResultErrorMaxLines: 20,
 			observerToolResultLineMaxChars: 300,
 			observerToolOutputPolicies: {},
 			agentMaxTurns: 4,
 			observerThinking: "low",
-			reflectorThinking: "low",
-			maintainerThinking: "low",
-			rewriteThinking: "low",
 			debugLog: false,
 		});
 		expect(loadConfig(cwd)).toEqual(DEFAULTS);
@@ -64,11 +57,7 @@ describe("config", () => {
 				strategy: "replacement",
 				observeEveryMessages: 10,
 				observeHardCapRecords: 40,
-				reflectEveryObservations: 20,
-				maintainEveryNewReflections: 6,
-				maintainerMaxInputReflections: 9,
 				maxInitialObserveTokens: 60,
-				reflectionsPoolMaxTokens: 30,
 				observerToolResultSummaryMaxLines: 2,
 				observerToolResultErrorMaxLines: 10,
 				observerToolResultLineMaxChars: 120,
@@ -76,9 +65,6 @@ describe("config", () => {
 				agentMaxTurns: 5,
 				model: { provider: "anthropic", id: "global", thinking: "medium" },
 				observerThinking: "low",
-				reflectorThinking: "high",
-				maintainerThinking: "minimal",
-				rewriteThinking: "medium",
 				debugLog: true,
 			},
 		});
@@ -95,11 +81,7 @@ describe("config", () => {
 			strategy: "replacement",
 			observeEveryMessages: 100,
 			observeHardCapRecords: 40,
-			reflectEveryObservations: 20,
-			maintainEveryNewReflections: 6,
-			maintainerMaxInputReflections: 9,
 			maxInitialObserveTokens: 60,
-			reflectionsPoolMaxTokens: 30,
 			observerToolResultSummaryMaxLines: 2,
 			observerToolResultErrorMaxLines: 10,
 			observerToolResultLineMaxChars: 120,
@@ -107,9 +89,6 @@ describe("config", () => {
 			agentMaxTurns: 5,
 			model: { provider: "openai", id: "project", thinking: "low" },
 			observerThinking: "low",
-			reflectorThinking: "high",
-			maintainerThinking: "minimal",
-			rewriteThinking: "medium",
 			debugLog: true,
 		});
 	});
@@ -120,11 +99,7 @@ describe("config", () => {
 				strategy: "unknown",
 				observeEveryMessages: -1,
 				observeHardCapRecords: 0,
-				reflectEveryObservations: 0,
-				maintainEveryNewReflections: 0,
-				maintainerMaxInputReflections: "12",
 				maxInitialObserveTokens: "100000",
-				reflectionsPoolMaxTokens: "8000",
 				observerToolResultSummaryMaxLines: "4",
 				observerToolResultErrorMaxLines: -1,
 				observerToolResultLineMaxChars: null,
@@ -132,14 +107,10 @@ describe("config", () => {
 				agentMaxTurns: null,
 				model: { provider: "anthropic", id: "", thinking: "huge" },
 				observerThinking: "huge",
-				reflectorThinking: 10,
-				maintainerThinking: "huge",
-				rewriteThinking: "huge",
 				debugLog: "true",
 			},
 		});
 
 		expect(loadConfig(cwd)).toEqual(DEFAULTS);
 	});
-
 });

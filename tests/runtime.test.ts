@@ -77,11 +77,11 @@ describe("Runtime behavior", () => {
 		const notify = vi.fn();
 
 		expect(runtime.recordMemoryUpdateStageError({ hasUI: true, ui: { notify } }, "observer", new Error("observe failed"))).toBe("observe failed");
-		expect(runtime.recordMemoryUpdateStageError({ hasUI: true, ui: { notify } }, "reflector", new Error("reflect failed"))).toBe("reflect failed");
+		expect(runtime.recordMemoryUpdateStageError({ hasUI: true, ui: { notify } }, "checkpoint-editor", new Error("checkpoint failed"))).toBe("checkpoint failed");
 
 		expect(runtime.lastObserverError).toBe("observe failed");
-		expect(runtime.lastReflectorError).toBe("reflect failed");
+		expect(runtime.lastCheckpointEditorError).toBe("checkpoint failed");
 		expect(notify).toHaveBeenCalledWith("Observational memory: observer failed: observe failed", "warning");
-		expect(notify).toHaveBeenCalledWith("Observational memory: reflector failed: reflect failed", "warning");
+		expect(notify).toHaveBeenCalledWith("Observational memory: checkpoint-editor failed: checkpoint failed", "warning");
 	});
 });

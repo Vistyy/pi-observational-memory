@@ -8,15 +8,9 @@ import type { MemoryUpdateCtx, StageOutcome } from "./types.js";
 
 type ObserverStageModule = typeof import("./observer-stage.js");
 type CheckpointStageModule = typeof import("./checkpoint-stage.js");
-type ReflectorStageModule = typeof import("./reflector-stage.js");
-type MaintainerStageModule = typeof import("./maintainer-stage.js");
-type RewriteStageModule = typeof import("./rewrite-stage.js");
 
 let observerStageModule: Promise<ObserverStageModule> | undefined;
 let checkpointStageModule: Promise<CheckpointStageModule> | undefined;
-let reflectorStageModule: Promise<ReflectorStageModule> | undefined;
-let maintainerStageModule: Promise<MaintainerStageModule> | undefined;
-let rewriteStageModule: Promise<RewriteStageModule> | undefined;
 
 function loadObserverStage(): Promise<ObserverStageModule> {
 	return observerStageModule ??= import("./observer-stage.js");
@@ -24,18 +18,6 @@ function loadObserverStage(): Promise<ObserverStageModule> {
 
 function loadCheckpointStage(): Promise<CheckpointStageModule> {
 	return checkpointStageModule ??= import("./checkpoint-stage.js");
-}
-
-function loadReflectorStage(): Promise<ReflectorStageModule> {
-	return reflectorStageModule ??= import("./reflector-stage.js");
-}
-
-function loadMaintainerStage(): Promise<MaintainerStageModule> {
-	return maintainerStageModule ??= import("./maintainer-stage.js");
-}
-
-function loadRewriteStage(): Promise<RewriteStageModule> {
-	return rewriteStageModule ??= import("./rewrite-stage.js");
 }
 
 async function runTrackedStage(
@@ -101,52 +83,5 @@ export async function runMemoryUpdate(
 			},
 		);
 		if (checkpointOutcome === "abort") return;
-		entries = ctx.sessionManager.getBranch() as Entry[];
-		work = computeMemoryStageWork(entries, runtime, trigger);
-	}
-
-	if (work.reflectorWork.length > 0) {
-		const reflectorOutcome = await runTrackedStage(
-			pi,
-			runtime,
-			ctx,
-			"reflector",
-			async () => {
-				const { runReflectorStage } = await loadReflectorStage();
-				return runReflectorStage(pi, runtime, ctx, resolveModel, work.reflectorWork);
-			},
-		);
-		if (reflectorOutcome === "abort") return;
-		entries = ctx.sessionManager.getBranch() as Entry[];
-		work = computeMemoryStageWork(entries, runtime, trigger);
-	}
-
-	if (work.maintainerWork.length > 0) {
-		const maintainerOutcome = await runTrackedStage(
-			pi,
-			runtime,
-			ctx,
-			"maintainer",
-			async () => {
-				const { runMaintainerStage } = await loadMaintainerStage();
-				return runMaintainerStage(pi, runtime, ctx, resolveModel, work.maintainerWork);
-			},
-		);
-		if (maintainerOutcome === "abort") return;
-		entries = ctx.sessionManager.getBranch() as Entry[];
-		work = computeMemoryStageWork(entries, runtime, trigger);
-	}
-
-	if (work.rewriteWork.length > 0) {
-		await runTrackedStage(
-			pi,
-			runtime,
-			ctx,
-			"rewrite",
-			async () => {
-				const { runRewriteStage } = await loadRewriteStage();
-				return runRewriteStage(pi, runtime, ctx, resolveModel);
-			},
-		);
 	}
 }

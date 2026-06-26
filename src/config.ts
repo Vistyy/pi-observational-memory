@@ -21,11 +21,7 @@ export interface Config {
 	strategy: MemoryStrategy;
 	observeEveryMessages: number;
 	observeHardCapRecords: number;
-	reflectEveryObservations: number;
-	maintainEveryNewReflections: number;
-	maintainerMaxInputReflections: number;
 	maxInitialObserveTokens: number;
-	reflectionsPoolMaxTokens: number;
 	observerToolResultSummaryMaxLines: number;
 	observerToolResultErrorMaxLines: number;
 	observerToolResultLineMaxChars: number;
@@ -33,9 +29,6 @@ export interface Config {
 	agentMaxTurns: number;
 	model?: ConfiguredModel;
 	observerThinking?: ModelThinkingLevel;
-	reflectorThinking?: ModelThinkingLevel;
-	maintainerThinking?: ModelThinkingLevel;
-	rewriteThinking?: ModelThinkingLevel;
 	debugLog: boolean;
 }
 
@@ -43,20 +36,13 @@ export const DEFAULTS: Config = {
 	strategy: STRATEGY.replacement,
 	observeEveryMessages: 8,
 	observeHardCapRecords: 32,
-	reflectEveryObservations: 8,
-	maintainEveryNewReflections: 10,
-	maintainerMaxInputReflections: 12,
 	maxInitialObserveTokens: 100_000,
-	reflectionsPoolMaxTokens: 8_000,
 	observerToolResultSummaryMaxLines: 4,
 	observerToolResultErrorMaxLines: 20,
 	observerToolResultLineMaxChars: 300,
 	observerToolOutputPolicies: {},
 	agentMaxTurns: 4,
 	observerThinking: "low",
-	reflectorThinking: "low",
-	maintainerThinking: "low",
-	rewriteThinking: "low",
 	debugLog: false,
 };
 
@@ -112,11 +98,7 @@ function normalizeSettingsConfig(value: Record<string, unknown>): Partial<Config
 	const numberKeys = [
 		"observeEveryMessages",
 		"observeHardCapRecords",
-		"reflectEveryObservations",
-		"maintainEveryNewReflections",
-		"maintainerMaxInputReflections",
 		"maxInitialObserveTokens",
-		"reflectionsPoolMaxTokens",
 		"observerToolResultSummaryMaxLines",
 		"observerToolResultErrorMaxLines",
 		"observerToolResultLineMaxChars",
@@ -129,9 +111,6 @@ function normalizeSettingsConfig(value: Record<string, unknown>): Partial<Config
 	if (isMemoryStrategy(value.strategy)) normalized.strategy = value.strategy;
 	if (typeof value.debugLog === "boolean") normalized.debugLog = value.debugLog;
 	if (isThinkingLevel(value.observerThinking)) normalized.observerThinking = value.observerThinking;
-	if (isThinkingLevel(value.reflectorThinking)) normalized.reflectorThinking = value.reflectorThinking;
-	if (isThinkingLevel(value.maintainerThinking)) normalized.maintainerThinking = value.maintainerThinking;
-	if (isThinkingLevel(value.rewriteThinking)) normalized.rewriteThinking = value.rewriteThinking;
 	const model = normalizeModel(value.model);
 	if (model) normalized.model = model;
 	const observerToolOutputPolicies = normalizeObserverToolOutputPolicies(value.observerToolOutputPolicies);

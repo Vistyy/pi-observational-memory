@@ -2,7 +2,6 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerCompactionHook } from "./hooks/compaction-hook.js";
 import { registerMemoryUpdateHook } from "./memory-update/scheduler.js";
 import { Runtime } from "./runtime.js";
-import { registerRecallTool } from "./tools/recall.js";
 
 export default function observationalMemory(pi: ExtensionAPI) {
 	const runtime = new Runtime();
@@ -12,7 +11,6 @@ export default function observationalMemory(pi: ExtensionAPI) {
 
 	registerLazyStatusCommand(pi, runtime);
 	registerLazyViewCommand(pi, runtime);
-	registerRecallTool(pi);
 }
 
 function registerLazyStatusCommand(pi: ExtensionAPI, runtime: Runtime): void {
@@ -27,7 +25,7 @@ function registerLazyStatusCommand(pi: ExtensionAPI, runtime: Runtime): void {
 
 function registerLazyViewCommand(pi: ExtensionAPI, runtime: Runtime): void {
 	pi.registerCommand("om:view", {
-		description: "Print observational memory context (context by default, full for recorded memory)",
+		description: "Print observational memory checkpoint content",
 		handler: async (args, ctx) => {
 			const { runViewCommand } = await import("./commands/view.js");
 			return runViewCommand(args, ctx, runtime);

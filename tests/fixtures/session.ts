@@ -22,14 +22,6 @@ export type TestObservation = {
 	sourceEntryIds: string[];
 };
 
-export type TestReflection = {
-	id: string;
-	kind: "reflection";
-	content: string;
-	sources: string[];
-	createdAt: string;
-};
-
 export type TestCheckpoint = {
 	id: string;
 	content: string;
@@ -38,12 +30,9 @@ export type TestCheckpoint = {
 };
 
 export const OM_OBSERVATIONS_RECORDED = "om.observations.recorded";
-export const OM_REFLECTIONS_RECORDED = "om.reflections.recorded";
-export const OM_REFLECTIONS_REWRITTEN = "om.reflections.rewritten";
 export const OM_CHECKPOINT_RECORDED = "om.checkpoint.recorded";
 export const OM_CHECKPOINT_COVERAGE_ADVANCED = "om.checkpoint.coverage_advanced";
 export const OM_CHECKPOINT = "om.checkpoint";
-export const OM_FOLDED = "om.folded";
 
 const DEFAULT_TIMESTAMP = "2026-05-02T10:00:00.000Z";
 
@@ -117,17 +106,6 @@ export function compactionEntry(
 	};
 }
 
-export function memoryDetails(
-	args: {
-		reflections?: TestReflection[];
-	} = {},
-): unknown {
-	return {
-		type: OM_FOLDED,
-		reflections: args.reflections ?? [],
-	};
-}
-
 export function checkpointMemoryDetails(
 	checkpoint: TestCheckpoint,
 	args: { coversUpToObservationId?: string } = {},
@@ -151,21 +129,6 @@ export function observation(
 		createdAt: DEFAULT_TIMESTAMP,
 		timestamp: DEFAULT_TIMESTAMP,
 		sourceEntryIds,
-		...overrides,
-	};
-}
-
-export function reflection(
-	id: string,
-	sources: string[] = ["obs_aaaaaaaaaaaa"],
-	overrides: Partial<TestReflection> = {},
-): TestReflection {
-	return {
-		id: id.startsWith("ref_") ? id : `ref_${id}`,
-		kind: "reflection",
-		content: `Reflection ${id}`,
-		sources: sources.map((source) => source.startsWith("obs_") || source.startsWith("ref_") ? source : `obs_${source}`),
-		createdAt: DEFAULT_TIMESTAMP,
 		...overrides,
 	};
 }
@@ -194,41 +157,6 @@ export function observationsRecordedEntry(
 		parentId: null,
 		timestamp: DEFAULT_TIMESTAMP,
 		customType: OM_OBSERVATIONS_RECORDED,
-		data: args,
-		...overrides,
-	};
-}
-
-export function reflectionsRecordedEntry(
-	id: string,
-	args: { reflections: TestReflection[]; coversUpToId: string },
-	overrides: Partial<TestEntry> = {},
-): TestEntry {
-	return {
-		type: "custom",
-		id,
-		parentId: null,
-		timestamp: DEFAULT_TIMESTAMP,
-		customType: OM_REFLECTIONS_RECORDED,
-		data: args,
-		...overrides,
-	};
-}
-
-export function reflectionsRewrittenEntry(
-	id: string,
-	args: {
-		retiredReflectionIds: string[];
-		summary?: string;
-	},
-	overrides: Partial<TestEntry> = {},
-): TestEntry {
-	return {
-		type: "custom",
-		id,
-		parentId: null,
-		timestamp: DEFAULT_TIMESTAMP,
-		customType: OM_REFLECTIONS_REWRITTEN,
 		data: args,
 		...overrides,
 	};

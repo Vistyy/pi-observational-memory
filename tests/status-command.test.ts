@@ -26,9 +26,6 @@ function setup(args: { entries: TestEntry[]; runtime?: Partial<Runtime> }) {
 			strategy: "replacement",
 			observeEveryMessages: 8,
 			observeHardCapRecords: 32,
-			reflectEveryObservations: 20,
-			maintainEveryNewReflections: 10,
-			reflectionsPoolMaxTokens: 30,
 		},
 		memoryUpdateInFlight: false,
 		memoryUpdatePhase: undefined,
@@ -132,7 +129,7 @@ describe("/om:status", () => {
 		const output = await setup({
 			entries: [],
 			runtime: {
-				config: { strategy: "off", observeEveryMessages: 8, observeHardCapRecords: 32, reflectEveryObservations: 20, maintainEveryNewReflections: 10, reflectionsPoolMaxTokens: 30 },
+				config: { strategy: "off", observeEveryMessages: 8, observeHardCapRecords: 32 },
 				memoryUpdateInFlight: true,
 				memoryUpdatePhase: "checkpoint-editor",
 				compactHookInFlight: true,
