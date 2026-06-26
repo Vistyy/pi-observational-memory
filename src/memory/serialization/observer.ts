@@ -38,9 +38,18 @@ type ToolResultEntry = {
 	toolCallId?: string;
 };
 
+export type ObserverRecordPlan = {
+	entries: RenderableEntry[];
+	recordCount: number;
+	lastIncludedEntryId?: string;
+	blockedByInFlightToolCall: boolean;
+};
+
 type ObserverRecord = {
 	entryIds: string[];
 	rendered: string | null;
+	lastEntryIndex: number;
+	countsForBatch: boolean;
 };
 
 function isRecord(value: unknown): value is Record<string, any> {
@@ -246,12 +255,13 @@ function buildToolResultMap(entries: RenderableEntry[]): Map<string, ToolResultE
 	return results;
 }
 
-function record(entryIds: string[], rendered: string | null): ObserverRecord {
-	return { entryIds: unique(entryIds.filter(Boolean)), rendered };
+function record(entryIds: string[], rendered: string | null, lastEntryIndex: number, countsForBatch = true): ObserverRecord {
+	return { entryIds: unique(entryIds.filter(Boolean)), rendered, lastEntryIndex, countsForBatch };
 }
 
-function buildObserverRecords(entries: RenderableEntry[], options: ObserverToolRenderingOptions): ObserverRecord[] {
+function buildObserverRecords(entries: RenderableEntry[], options: ObserverToolRenderingOptions): { records: ObserverRecord[]; blockedByInFlightToolCall: boolean } {
 	const records: ObserverRecord[] = [];
+	let blockedByInFlightToolCall = false;
 	const toolResultsByCallId = buildToolResultMap(entries);
 	const consumedToolResultEntryIds = new Set<string>();
 
@@ -262,21 +272,27 @@ function buildObserverRecords(entries: RenderableEntry[], options: ObserverToolR
 		const time = formatTimestamp(typeof msg.timestamp === "string" || typeof msg.timestamp === "number" ? msg.timestamp : entry.timestamp);
 
 		if (msg.role === "user") {
-			records.push(record([entry.id], renderUserMessage(entry, msg, time)));
+			const rendered = renderUserMessage(entry, msg, time);
+			records.push(record([entry.id], rendered, i, rendered !== null));
 			continue;
 		}
 
 		if (msg.role === "assistant") {
 			const toolCalls = extractToolCalls(msg.content);
 			if (toolCalls.length === 0) {
-				records.push(record([entry.id], renderAssistantText(entry, msg, time)));
+				const rendered = renderAssistantText(entry, msg, time);
+				records.push(record([entry.id], rendered, i, rendered !== null));
 				continue;
 			}
 
 			const missingToolCalls = toolCalls.filter((call) => !call.id || !toolResultsByCallId.has(call.id));
-			if (missingToolCalls.length > 0 && !isAbandonedToolCallMessage(entries, i, msg, options)) break;
+			if (missingToolCalls.length > 0 && !isAbandonedToolCallMessage(entries, i, msg, options)) {
+				blockedByInFlightToolCall = true;
+				break;
+			}
 
-			records.push(record([entry.id], renderAssistantText(entry, msg, time)));
+			const renderedAssistantText = renderAssistantText(entry, msg, time);
+			records.push(record([entry.id], renderedAssistantText, i, renderedAssistantText !== null));
 			for (const call of toolCalls) {
 				const result = call.id ? toolResultsByCallId.get(call.id) : undefined;
 				if (result?.entry.id) {
@@ -292,6 +308,7 @@ function buildObserverRecords(entries: RenderableEntry[], options: ObserverToolR
 							resultText: textAndPlaceholders(result.message.content),
 							options,
 						}),
+						Math.max(i, entries.indexOf(result.entry)),
 					));
 					continue;
 				}
@@ -305,6 +322,7 @@ function buildObserverRecords(entries: RenderableEntry[], options: ObserverToolR
 						argumentsText: argumentText(call.arguments),
 						options,
 					}),
+					i,
 				));
 			}
 			continue;
@@ -312,16 +330,40 @@ function buildObserverRecords(entries: RenderableEntry[], options: ObserverToolR
 
 		if (msg.role === "toolResult") {
 			if (consumedToolResultEntryIds.has(entry.id)) continue;
-			records.push(record([entry.id], renderStandaloneToolResult(entry, msg, time, options)));
+			records.push(record([entry.id], renderStandaloneToolResult(entry, msg, time, options), i));
 			continue;
 		}
 
 		if (msg.role === "bashExecution") {
-			records.push(record([entry.id], renderLegacyBashExecution(entry, msg, time, options)));
+			records.push(record([entry.id], renderLegacyBashExecution(entry, msg, time, options), i));
 		}
 	}
 
-	return records;
+	return { records, blockedByInFlightToolCall };
+}
+
+export function planObserverRecordBatch(
+	entries: RenderableEntry[],
+	options: ObserverToolRenderingOptions,
+	maxRecords = Number.MAX_SAFE_INTEGER,
+): ObserverRecordPlan {
+	const { records, blockedByInFlightToolCall } = buildObserverRecords(entries, options);
+	const selected: ObserverRecord[] = [];
+	let count = 0;
+	for (const observerRecord of records) {
+		if (observerRecord.countsForBatch) {
+			if (count >= maxRecords) break;
+			count += 1;
+		}
+		selected.push(observerRecord);
+	}
+	const lastIncludedIndex = selected.reduce((max, observerRecord) => Math.max(max, observerRecord.lastEntryIndex), -1);
+	return {
+		entries: lastIncludedIndex >= 0 ? entries.slice(0, lastIncludedIndex + 1) : [],
+		recordCount: count,
+		lastIncludedEntryId: lastIncludedIndex >= 0 ? entries[lastIncludedIndex]?.id : undefined,
+		blockedByInFlightToolCall,
+	};
 }
 
 function sourceLabel(ids: string[]): string {
@@ -334,7 +376,7 @@ export function serializeObserverSourceEntries(
 ): SourceAddressedSerialization {
 	const blocks: string[] = [];
 	const sourceEntryIds: string[] = [];
-	for (const observerRecord of buildObserverRecords(entries, options)) {
+	for (const observerRecord of buildObserverRecords(entries, options).records) {
 		if (!observerRecord.rendered?.trim()) continue;
 		const ids = observerRecord.entryIds;
 		if (ids.length === 0) continue;

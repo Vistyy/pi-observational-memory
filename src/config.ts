@@ -20,6 +20,7 @@ export type ObserverToolOutputPolicy = "omit" | "bounded" | "full";
 export interface Config {
 	strategy: MemoryStrategy;
 	observeEveryMessages: number;
+	observeHardCapRecords: number;
 	reflectEveryObservations: number;
 	maintainEveryNewReflections: number;
 	maintainerMaxInputReflections: number;
@@ -41,6 +42,7 @@ export interface Config {
 export const DEFAULTS: Config = {
 	strategy: STRATEGY.replacement,
 	observeEveryMessages: 8,
+	observeHardCapRecords: 32,
 	reflectEveryObservations: 8,
 	maintainEveryNewReflections: 10,
 	maintainerMaxInputReflections: 12,
@@ -109,6 +111,7 @@ function normalizeSettingsConfig(value: Record<string, unknown>): Partial<Config
 	const normalized: Partial<Config> = {};
 	const numberKeys = [
 		"observeEveryMessages",
+		"observeHardCapRecords",
 		"reflectEveryObservations",
 		"maintainEveryNewReflections",
 		"maintainerMaxInputReflections",

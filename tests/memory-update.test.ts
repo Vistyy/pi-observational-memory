@@ -29,7 +29,7 @@ import {
 	rawMessage,
 	type TestEntry,
 } from "./fixtures/session.js";
-import { memoryUpdateApi, type AgentStartHandler, type TurnEndHandler } from "./fixtures/pi.js";
+import { memoryUpdateApi, type AgentStartHandler, type MessageEndHandler, type TurnEndHandler } from "./fixtures/pi.js";
 
 beforeEach(() => {
 	mockAgents.runObserver.mockReset();
@@ -45,6 +45,7 @@ beforeEach(() => {
 function setup(args: {
 	entries: TestEntry[];
 	observeEveryMessages?: number;
+	observeHardCapRecords?: number;
 	reflectEveryObservations?: number;
 	reflectionsPoolMaxTokens?: number;
 	maintainEveryNewReflections?: number;
@@ -56,7 +57,7 @@ function setup(args: {
 	appendEntryReturnsId?: boolean;
 }) {
 	let entries = [...args.entries];
-	const handlers: { agent_start?: AgentStartHandler; turn_end?: TurnEndHandler } = {};
+	const handlers: { agent_start?: AgentStartHandler; message_end?: MessageEndHandler; turn_end?: TurnEndHandler } = {};
 	const appendEntry = vi.fn((customType: string, data: unknown) => {
 		const id = `appended-${appendEntry.mock.calls.length}`;
 		entries = [...entries, { type: "custom", id, parentId: entries.at(-1)?.id ?? null, timestamp: "2026-05-02T10:00:00.000Z", customType, data }];
@@ -69,6 +70,7 @@ function setup(args: {
 			strategy: args.strategy ?? "replacement",
 			debugLog: false,
 			observeEveryMessages: args.observeEveryMessages ?? 1,
+			observeHardCapRecords: args.observeHardCapRecords ?? 32,
 			reflectEveryObservations: args.reflectEveryObservations ?? 1,
 			maxInitialObserveTokens: args.maxInitialObserveTokens ?? 100_000,
 			reflectionsPoolMaxTokens: args.reflectionsPoolMaxTokens ?? 100,
@@ -116,8 +118,9 @@ function setup(args: {
 		pi,
 		runtime,
 		ctx,
-		fire: (eventName: "agent_start" | "turn_end" = "turn_end") => handlers[eventName]!({ type: eventName } as never, ctx),
+		fire: (eventName: "agent_start" | "message_end" | "turn_end" = "turn_end") => handlers[eventName]!({ type: eventName } as never, ctx),
 		fireAgentStart: () => handlers.agent_start!({ type: "agent_start" } as never, ctx),
+		fireMessageEnd: () => handlers.message_end!({ type: "message_end" } as never, ctx),
 		fireTurnEnd: () => handlers.turn_end!({ type: "turn_end" } as never, ctx),
 		runLaunchedWork: async () => launchedWork?.(),
 		getEntries: () => entries,
@@ -209,6 +212,26 @@ describe("memory update hook", () => {
 	});
 
 
+
+	it("turn_end launches observer only when at least 8 ready records are pending", () => {
+		const seven = setup({ entries: Array.from({ length: 7 }, (_, i) => rawMessage(`raw-${i + 1}`, "aaaaaaaa")), observeEveryMessages: 8, reflectEveryObservations: 999, maintainEveryNewReflections: 999, reflectionsPoolMaxTokens: 999 });
+		seven.fireTurnEnd();
+		expect(seven.runtime.launchMemoryUpdateTask).not.toHaveBeenCalled();
+
+		const eight = setup({ entries: Array.from({ length: 8 }, (_, i) => rawMessage(`raw-${i + 1}`, "aaaaaaaa")), observeEveryMessages: 8, reflectEveryObservations: 999, maintainEveryNewReflections: 999, reflectionsPoolMaxTokens: 999 });
+		eight.fireTurnEnd();
+		expect(eight.runtime.launchMemoryUpdateTask).toHaveBeenCalledOnce();
+	});
+
+	it("message_end launches observer only at the hard cap", () => {
+		const thirtyOne = setup({ entries: Array.from({ length: 31 }, (_, i) => rawMessage(`raw-${i + 1}`, "aaaaaaaa")), observeEveryMessages: 8, observeHardCapRecords: 32, reflectEveryObservations: 999, maintainEveryNewReflections: 999, reflectionsPoolMaxTokens: 999 });
+		thirtyOne.fireMessageEnd();
+		expect(thirtyOne.runtime.launchMemoryUpdateTask).not.toHaveBeenCalled();
+
+		const thirtyTwo = setup({ entries: Array.from({ length: 32 }, (_, i) => rawMessage(`raw-${i + 1}`, "aaaaaaaa")), observeEveryMessages: 8, observeHardCapRecords: 32, reflectEveryObservations: 999, maintainEveryNewReflections: 999, reflectionsPoolMaxTokens: 999 });
+		thirtyTwo.fireMessageEnd();
+		expect(thirtyTwo.runtime.launchMemoryUpdateTask).toHaveBeenCalledOnce();
+	});
 
 	it("does not launch from either entrypoint when strategy is off", () => {
 		const entries = [rawMessage("raw-1", "aaaaaaaa")];

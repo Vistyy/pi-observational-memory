@@ -38,6 +38,7 @@ describe("config", () => {
 		expect(DEFAULTS).toEqual({
 			strategy: STRATEGY.replacement,
 			observeEveryMessages: 8,
+			observeHardCapRecords: 32,
 			reflectEveryObservations: 8,
 			maintainEveryNewReflections: 10,
 			maintainerMaxInputReflections: 12,
@@ -62,6 +63,7 @@ describe("config", () => {
 			"observational-memory": {
 				strategy: "replacement",
 				observeEveryMessages: 10,
+				observeHardCapRecords: 40,
 				reflectEveryObservations: 20,
 				maintainEveryNewReflections: 6,
 				maintainerMaxInputReflections: 9,
@@ -92,6 +94,7 @@ describe("config", () => {
 		expect(loadConfig(cwd)).toMatchObject({
 			strategy: "replacement",
 			observeEveryMessages: 100,
+			observeHardCapRecords: 40,
 			reflectEveryObservations: 20,
 			maintainEveryNewReflections: 6,
 			maintainerMaxInputReflections: 9,
@@ -116,6 +119,7 @@ describe("config", () => {
 			"observational-memory": {
 				strategy: "unknown",
 				observeEveryMessages: -1,
+				observeHardCapRecords: 0,
 				reflectEveryObservations: 0,
 				maintainEveryNewReflections: 0,
 				maintainerMaxInputReflections: "12",

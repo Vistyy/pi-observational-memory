@@ -2,7 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { debugLog } from "../debug-log.js";
 import type { MemoryUpdatePhase, Runtime } from "../runtime.js";
 import type { Entry } from "../session-ledger/index.js";
-import { computeMemoryStageWork } from "./due.js";
+import { computeMemoryStageWork, type MemoryUpdateTrigger } from "./due.js";
 import { makeModelResolver } from "./model-resolver.js";
 import type { MemoryUpdateCtx, StageOutcome } from "./types.js";
 
@@ -53,10 +53,11 @@ export async function runMemoryUpdate(
 	pi: ExtensionAPI,
 	runtime: Runtime,
 	ctx: MemoryUpdateCtx,
+	trigger: MemoryUpdateTrigger = "turn_end",
 ): Promise<void> {
 	const resolveModel = makeModelResolver(runtime, ctx);
 	let entries = ctx.sessionManager.getBranch() as Entry[];
-	let work = computeMemoryStageWork(entries, runtime);
+	let work = computeMemoryStageWork(entries, runtime, trigger);
 
 	if (work.observerWork.length > 0) {
 		const observerWork = runTrackedStage(
@@ -79,7 +80,7 @@ export async function runMemoryUpdate(
 		}
 		if (observerOutcome === "abort") return;
 		entries = ctx.sessionManager.getBranch() as Entry[];
-		work = computeMemoryStageWork(entries, runtime);
+		work = computeMemoryStageWork(entries, runtime, trigger);
 	}
 
 	if (work.reflectorWork.length > 0) {
@@ -95,7 +96,7 @@ export async function runMemoryUpdate(
 		);
 		if (reflectorOutcome === "abort") return;
 		entries = ctx.sessionManager.getBranch() as Entry[];
-		work = computeMemoryStageWork(entries, runtime);
+		work = computeMemoryStageWork(entries, runtime, trigger);
 	}
 
 	if (work.maintainerWork.length > 0) {
@@ -111,7 +112,7 @@ export async function runMemoryUpdate(
 		);
 		if (maintainerOutcome === "abort") return;
 		entries = ctx.sessionManager.getBranch() as Entry[];
-		work = computeMemoryStageWork(entries, runtime);
+		work = computeMemoryStageWork(entries, runtime, trigger);
 	}
 
 	if (work.rewriteWork.length > 0) {
