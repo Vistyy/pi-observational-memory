@@ -120,6 +120,38 @@ describe("runCheckpointEditor", () => {
 		})).resolves.toEqual(expect.objectContaining({ content: EMPTY_CHECKPOINT_MARKDOWN, reason: "already valid", changed: false }));
 	});
 
+	it("records edit failure reasons", async () => {
+		const path = await draftPath();
+		const loop = fakeAgentLoop(async (_prompts, context) => {
+			const edit = context.tools.find((tool) => tool.name === "edit")!;
+			const finish = context.tools.find((tool) => tool.name === "finish_checkpoint_edit")!;
+			await edit.execute("edit-bad-path", { path: "other.md", oldText: "x", newText: "y" });
+			await edit.execute("edit-missing", { path: "checkpoint.md", oldText: "not in checkpoint", newText: "replacement" });
+			await edit.execute("edit-not-unique", { path: "checkpoint.md", oldText: "None known.", newText: "replacement" });
+			await finish.execute("finish-1", { reason: "left unchanged" });
+		});
+
+		await expect(runCheckpointEditor({
+			model: {},
+			apiKey: "test",
+			draftPath: path,
+			initialContent: EMPTY_CHECKPOINT_MARKDOWN,
+			observationsText: "None.",
+			purpose: "prune",
+			agentLoop: loop,
+		})).resolves.toEqual(expect.objectContaining({
+			changed: false,
+			metrics: expect.objectContaining({
+				failedEditCalls: 3,
+				editFailureReasons: {
+					badPath: 1,
+					oldTextNotFound: 1,
+					oldTextNotUnique: 1,
+				},
+			}),
+		}));
+	});
+
 	it("returns undefined when finish is not called", async () => {
 		const path = await draftPath();
 		const loop = fakeAgentLoop(() => {});

@@ -30,6 +30,15 @@ export function loadCheckpointFromSession(path: string, entryId: string): Checkp
 	return checkpoint;
 }
 
+export function loadLatestCheckpointFromSession(path: string = DEFAULT_REAL_SESSION_PATH): { checkpoint: Checkpoint; entryId: string; entryIndex: number } {
+	const entries = loadSessionEntries(path);
+	for (let index = entries.length - 1; index >= 0; index--) {
+		const checkpoint = checkpointEntryContent(entries[index]);
+		if (checkpoint) return { checkpoint, entryId: entries[index].id, entryIndex: index };
+	}
+	throw new Error(`session fixture has no checkpoint entries: ${path}`);
+}
+
 export function loadObservationsFromSession(path: string, entryId: string): Observation[] {
 	const entry = loadSessionEntries(path).find((candidate) => candidate.id === entryId);
 	if (!entry) throw new Error(`session fixture observations entry not found: ${entryId}`);

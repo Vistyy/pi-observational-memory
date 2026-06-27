@@ -50,11 +50,11 @@ If retrieval is unavailable or inconclusive, say what is unknown.
 Do not fill session-specific gaps from plausibility.
 ```
 
-Observational Memory can add this while the extension is loaded by appending to the Pi `before_agent_start` system prompt.
+Put this in the shared/global agent instructions, not only in Observational Memory.
 
-That is extension-scoped.
+For this development environment, add it to `/home/syzom/.pi/agent/AGENTS.md`.
 
-If the behavior should apply without Observational Memory, it belongs in Pi core or shared/global agent instructions.
+An Observational Memory `before_agent_start` hook would be extension-scoped, so it is not the right first home for a general anti-guessing rule.
 
 ## Current prune latency problem
 
@@ -364,4 +364,5 @@ The useful idea is the durable replacement snapshot and tail replay model.
 5. Add prompt gate updates if they are not already present.
 6. Add or verify checkpoint cadence thresholds.
 7. Make health prune run in the background instead of blocking interactive paths.
-8. Only then test edit-history redaction, deterministic fallback, or terminal edit variants.
+8. Stop compaction-pressure from blocking indefinitely on hard-max CheckpointEditor prune.
+9. Only then test edit-history redaction, deterministic fallback, or terminal edit variants.

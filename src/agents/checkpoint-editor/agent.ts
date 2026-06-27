@@ -6,7 +6,7 @@ import { Type } from "@earendil-works/pi-ai";
 import type { Static } from "typebox";
 import { isValidCheckpointMarkdown } from "../../session-ledger/index.js";
 import { debugLog } from "../../debug-log.js";
-import { runMemoryAgentLoop, type MemoryAgentUsage } from "../common.js";
+import { runMemoryAgentLoop, type MemoryAgentRequestDiagnostics, type MemoryAgentUsage } from "../common.js";
 import { CHECKPOINT_EDITOR_SYSTEM, checkpointEditorPruneUserText, checkpointEditorUpdateUserText } from "./prompts.js";
 
 interface RunCheckpointEditorArgs {
@@ -22,6 +22,8 @@ interface RunCheckpointEditorArgs {
 	maxTurns?: number;
 	thinkingLevel?: ModelThinkingLevel;
 	onUsage?: (usage: MemoryAgentUsage) => void;
+	onRequestDiagnostics?: (diagnostics: MemoryAgentRequestDiagnostics) => void;
+	pruneSizeGuidance?: string;
 }
 
 export type CheckpointEditorMetrics = {
@@ -29,6 +31,11 @@ export type CheckpointEditorMetrics = {
 	editCalls: number;
 	successfulEditCalls: number;
 	failedEditCalls: number;
+	editFailureReasons: {
+		badPath: number;
+		oldTextNotFound: number;
+		oldTextNotUnique: number;
+	};
 	editOldTextChars: number;
 	editNewTextChars: number;
 	finishCalls: number;
@@ -87,6 +94,11 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		editCalls: 0,
 		successfulEditCalls: 0,
 		failedEditCalls: 0,
+		editFailureReasons: {
+			badPath: 0,
+			oldTextNotFound: 0,
+			oldTextNotUnique: 0,
+		},
 		editOldTextChars: 0,
 		editNewTextChars: 0,
 		finishCalls: 0,
@@ -121,6 +133,7 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 			metrics.editNewTextChars += params.newText.length;
 			if (!allowedPath(params.path)) {
 				metrics.failedEditCalls++;
+				metrics.editFailureReasons.badPath++;
 				debugLog("checkpoint_editor.tool_result", { tool: "edit", ok: false, errorMessage: "Only checkpoint.md may be edited." });
 				return errorResult("Only checkpoint.md may be edited.");
 			}
@@ -128,11 +141,13 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 			const first = current.indexOf(params.oldText);
 			if (first === -1) {
 				metrics.failedEditCalls++;
+				metrics.editFailureReasons.oldTextNotFound++;
 				debugLog("checkpoint_editor.tool_result", { tool: "edit", ok: false, errorMessage: "oldText was not found in checkpoint.md.", oldTextChars: params.oldText.length, newTextChars: params.newText.length });
 				return errorResult("oldText was not found in checkpoint.md.");
 			}
 			if (current.indexOf(params.oldText, first + params.oldText.length) !== -1) {
 				metrics.failedEditCalls++;
+				metrics.editFailureReasons.oldTextNotUnique++;
 				debugLog("checkpoint_editor.tool_result", { tool: "edit", ok: false, errorMessage: "oldText is not unique in checkpoint.md.", oldTextChars: params.oldText.length, newTextChars: params.newText.length });
 				return errorResult("oldText is not unique in checkpoint.md.");
 			}
@@ -163,7 +178,7 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 	};
 
 	const userText = args.purpose === "prune"
-		? checkpointEditorPruneUserText()
+		? checkpointEditorPruneUserText({ sizeGuidance: args.pruneSizeGuidance })
 		: checkpointEditorUpdateUserText({ observationsText: args.observationsText });
 
 	await runMemoryAgentLoop({
@@ -179,6 +194,7 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		tools: [readTool as AgentTool<any>, editTool as AgentTool<any>, finishTool as AgentTool<any>],
 		agentName: "checkpoint-editor",
 		onUsage: args.onUsage,
+		onRequestDiagnostics: args.onRequestDiagnostics,
 		requireToolCall: true,
 		toolCallReminder: "You must update checkpoint.md if needed and call finish_checkpoint_edit.",
 		maxNoToolRetries: 2,
@@ -201,6 +217,7 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 			tools: [readTool as AgentTool<any>, finishTool as AgentTool<any>],
 			agentName: "checkpoint-editor",
 			onUsage: args.onUsage,
+			onRequestDiagnostics: args.onRequestDiagnostics,
 			requireToolCall: true,
 			toolCallReminder: "You must call finish_checkpoint_edit for the valid checkpoint.md draft.",
 			maxNoToolRetries: 1,

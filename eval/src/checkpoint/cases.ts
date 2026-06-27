@@ -1,7 +1,9 @@
 import { EMPTY_CHECKPOINT_MARKDOWN } from "../../../src/memory/checkpoint.js";
+import { isValidCheckpointMarkdown } from "../../../src/memory/checkpoint-format.js";
+import { estimateStringTokens } from "../../../src/memory/token-estimate.js";
 import { OM_CHECKPOINT_RECORDED, OM_OBSERVATIONS_RECORDED, foldLedger, type Entry } from "../../../src/session-ledger/index.js";
 import { gradeContent, includesAll } from "./grading.js";
-import { DEFAULT_REAL_SESSION_PATH, loadCheckpointUpdateFixture } from "./session-fixture.js";
+import { DEFAULT_REAL_SESSION_PATH, loadCheckpointUpdateFixture, loadLatestCheckpointFromSession } from "./session-fixture.js";
 import { editorPruneScenario, sessionReplayScenario } from "./scenarios.js";
 import type { EvalCase, SessionReplayResult } from "./types.js";
 
@@ -137,6 +139,145 @@ function checkpointPruneReplayCase(): EvalCase {
 			};
 		},
 	});
+}
+
+function shrinkPercent(initial: string, content: string): number {
+	if (initial.length === 0) return 0;
+	return Math.round(((initial.length - content.length) / initial.length) * 10_000) / 100;
+}
+
+function clearShrinkMissing(initial: string, content: string, minimumPercent = 10): string[] {
+	return shrinkPercent(initial, content) >= minimumPercent ? [] : [`shrink >= ${minimumPercent}%`];
+}
+
+function largeSyntheticCheckpoint(): string {
+	const duplicateJunk = Array.from({ length: 70 }, (_, index) => `- SYNTHETIC_REMOVE_DUPLICATE ${index}: repeated stale implementation note with no active decision. duplicate-junk duplicate-junk duplicate-junk duplicate-junk.`);
+	const similarFacts = Array.from({ length: 45 }, (_, index) => `- Similar historical note ${index}: checkpoint pruning discussion variant ${index % 9} was considered, but it is not an active decision unless tied to a keep anchor.`);
+	const staleBloat = Array.from({ length: 60 }, (_, index) => `- SYNTHETIC_REMOVE_STALE ${index}: obsolete temporary trace detail from an earlier debugging pass. stale-noise stale-noise stale-noise stale-noise.`);
+	const noise = Array.from({ length: 45 }, (_, index) => `- SYNTHETIC_REMOVE_NOISE ${index}: raw scratchpad wording that does not affect the next action. low-value low-value low-value low-value.`);
+	return `# Checkpoint
+
+## Current objective
+
+Diagnose large checkpoint prune latency without losing handoff-critical facts.
+
+## Progress and decisions
+
+- SYNTHETIC_KEEP_DECISION_ALPHA: accepted that large prune diagnostics compare no guidance, soft 25% shrink, and soft 4k budget variants.
+- Accepted: latency is diagnostic-only until baseline data exists.
+- Accepted: synthetic and real-latest fixtures both run once in the normal checkpoint eval set.
+${duplicateJunk.join("\n")}
+${similarFacts.join("\n")}
+
+## Important context
+
+- SYNTHETIC_KEEP_PATH: keep exact anchor \`src/agents/checkpoint-editor/agent.ts\`.
+- SYNTHETIC_KEEP_COMMAND: keep exact command \`pnpm checkpoint-evals -- --case checkpoint-prune-large-synthetic-baseline\`.
+- SYNTHETIC_KEEP_BLOCKER: compaction-pressure must not block indefinitely on hard-max CheckpointEditor prune.
+${staleBloat.join("\n")}
+
+## Remaining work
+
+- SYNTHETIC_KEEP_NEXT_STEP: add request diagnostics, edit failure reason counts, and a compact prune diagnostic table.
+${noise.join("\n")}
+
+## References and anchors
+
+- \`src/agents/common.ts\`
+- \`eval/src/checkpoint/cases.ts\`
+- \`checkpoint-prune-real-latest-baseline\`
+`;
+}
+
+type PruneGuidanceVariant = {
+	suffix: string;
+	promptVariant: string;
+	pruneSizeGuidance?: string;
+};
+
+const PRUNE_GUIDANCE_VARIANTS: PruneGuidanceVariant[] = [
+	{ suffix: "baseline", promptVariant: "none" },
+	{
+		suffix: "soft-25",
+		promptVariant: "soft-25-percent",
+		pruneSizeGuidance: "Aim to make checkpoint.md at least 25% smaller. Preserving handoff-critical facts is more important than hitting this target.",
+	},
+	{
+		suffix: "soft-4k",
+		promptVariant: "soft-4k-budget",
+		pruneSizeGuidance: "Aim for the normal 4k token checkpoint target. Preserving handoff-critical facts is more important than hitting this budget.",
+	},
+];
+
+function largePruneDiagnosticCases(): EvalCase[] {
+	const synthetic = largeSyntheticCheckpoint();
+	const latest = loadLatestCheckpointFromSession(DEFAULT_REAL_SESSION_PATH);
+	const syntheticCases = PRUNE_GUIDANCE_VARIANTS.map((variant) => editorPruneScenario({
+		id: `checkpoint-prune-large-synthetic-${variant.suffix}`,
+		initialContent: synthetic,
+		maxTurns: 10,
+		pruneSizeGuidance: variant.pruneSizeGuidance,
+		metadata: {
+			pruneDiagnostic: true,
+			fixtureType: "synthetic",
+			promptVariant: variant.promptVariant,
+			initialChars: synthetic.length,
+			initialTokenEstimate: estimateStringTokens(synthetic),
+		},
+		grade: (result) => {
+			if (!result) return { passed: false, reason: "checkpoint editor did not finish", missing: ["finish_checkpoint_edit"] };
+			const missing = includesAll(result.content, [
+				"SYNTHETIC_KEEP_DECISION_ALPHA",
+				"SYNTHETIC_KEEP_PATH",
+				"SYNTHETIC_KEEP_COMMAND",
+				"SYNTHETIC_KEEP_BLOCKER",
+				"SYNTHETIC_KEEP_NEXT_STEP",
+			]);
+			missing.push(...clearShrinkMissing(synthetic, result.content));
+			const incorrect = [
+				...includesAll(result.content, ["# Checkpoint", "## Current objective", "## Progress and decisions", "## Important context", "## Remaining work", "## References and anchors"]),
+			].map((heading) => `missing heading ${heading}`);
+			if (!isValidCheckpointMarkdown(result.content)) incorrect.push("invalid checkpoint markdown");
+			for (const term of ["SYNTHETIC_REMOVE_DUPLICATE", "SYNTHETIC_REMOVE_STALE", "SYNTHETIC_REMOVE_NOISE"]) {
+				if (result.content.includes(term)) incorrect.push(term);
+			}
+			return {
+				passed: missing.length === 0 && incorrect.length === 0,
+				reason: missing.length === 0 && incorrect.length === 0 ? "large synthetic prune checks passed" : "large synthetic prune checks failed",
+				missing,
+				incorrect,
+			};
+		},
+	}));
+	const realCases = PRUNE_GUIDANCE_VARIANTS.map((variant) => editorPruneScenario({
+		id: `checkpoint-prune-real-latest-${variant.suffix}`,
+		initialContent: latest.checkpoint.content,
+		maxTurns: 10,
+		pruneSizeGuidance: variant.pruneSizeGuidance,
+		metadata: {
+			pruneDiagnostic: true,
+			fixtureType: "real-latest",
+			promptVariant: variant.promptVariant,
+			sessionPath: DEFAULT_REAL_SESSION_PATH,
+			checkpointEntryId: latest.entryId,
+			checkpointId: latest.checkpoint.id,
+			initialChars: latest.checkpoint.content.length,
+			initialTokenEstimate: estimateStringTokens(latest.checkpoint.content),
+		},
+		grade: (result) => {
+			if (!result) return { passed: false, reason: "checkpoint editor did not finish", missing: ["finish_checkpoint_edit"] };
+			const missing = clearShrinkMissing(latest.checkpoint.content, result.content);
+			const incorrect: string[] = [];
+			if (!isValidCheckpointMarkdown(result.content)) incorrect.push("invalid checkpoint markdown");
+			return {
+				passed: missing.length === 0 && incorrect.length === 0,
+				reason: missing.length === 0 && incorrect.length === 0 ? "real latest prune checks passed" : "real latest prune checks failed",
+				missing,
+				incorrect,
+			};
+		},
+	}));
+	return [...syntheticCases, ...realCases];
 }
 
 function pruneEvalCases(): EvalCase[] {
@@ -347,6 +488,7 @@ Keep checkpoint concise.
 			}),
 		},
 		...pruneEvalCases(),
+		...largePruneDiagnosticCases(),
 		realSessionWideContextCase(),
 		realSessionReplayCase(),
 		checkpointPruneReplayCase(),

@@ -27,6 +27,7 @@ export function editorPruneScenario(args: {
 	id: string;
 	initialContent: string;
 	maxTurns?: number;
+	pruneSizeGuidance?: string;
 	metadata?: Record<string, unknown>;
 	grade: (result: CheckpointEditorResult | undefined) => Grade;
 }): EditorEvalCase {
@@ -37,6 +38,7 @@ export function editorPruneScenario(args: {
 		initialContent: args.initialContent,
 		observationsText: "",
 		maxTurns: args.maxTurns,
+		pruneSizeGuidance: args.pruneSizeGuidance,
 		metadata: args.metadata,
 		grade: args.grade,
 	};

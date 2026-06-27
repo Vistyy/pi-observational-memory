@@ -16,6 +16,17 @@ export type MemoryAgentUsage = {
 	usage: unknown;
 };
 
+export type MemoryAgentRequestDiagnostics = {
+	agent: MemoryAgentName | undefined;
+	requestIndex: number;
+	attempt: number;
+	systemPromptTokenEstimate: number;
+	messagesTokenEstimate: number;
+	toolsTokenEstimate: number;
+	messageCount: number;
+	toolCount: number;
+};
+
 export type MemoryAgentLoopArgs = {
 	model: Model<any>;
 	apiKey: string;
@@ -29,6 +40,7 @@ export type MemoryAgentLoopArgs = {
 	tools: AgentTool<any>[];
 	agentName?: MemoryAgentName;
 	onUsage?: (usage: MemoryAgentUsage) => void;
+	onRequestDiagnostics?: (diagnostics: MemoryAgentRequestDiagnostics) => void;
 	requireToolCall?: boolean;
 	maxNoToolRetries?: number;
 	toolCallReminder?: string;
@@ -152,16 +164,23 @@ export async function runMemoryAgentLoop(args: MemoryAgentLoopArgs): Promise<voi
 			const requestIndex = providerRequestCount;
 			const requestStarted = Date.now();
 			const context = llmContext as { systemPrompt?: string; messages?: unknown[]; tools?: unknown[] };
-			debugLog("memory_agent.provider_request", {
+			const systemPromptTokenEstimate = estimateStringTokens(context.systemPrompt ?? "");
+			const messagesTokenEstimate = estimateJsonTokens(context.messages ?? []);
+			const toolsTokenEstimate = estimateJsonTokens(context.tools ?? []);
+			const messageCount = context.messages?.length ?? 0;
+			const toolCount = context.tools?.length ?? 0;
+			const requestDiagnostics: MemoryAgentRequestDiagnostics = {
 				agent: args.agentName,
 				requestIndex,
 				attempt,
-				systemPromptTokenEstimate: estimateStringTokens(context.systemPrompt ?? ""),
-				messagesTokenEstimate: estimateJsonTokens(context.messages ?? []),
-				toolsTokenEstimate: estimateJsonTokens(context.tools ?? []),
-				messageCount: context.messages?.length ?? 0,
-				toolCount: context.tools?.length ?? 0,
-			});
+				systemPromptTokenEstimate,
+				messagesTokenEstimate,
+				toolsTokenEstimate,
+				messageCount,
+				toolCount,
+			};
+			args.onRequestDiagnostics?.(requestDiagnostics);
+			debugLog("memory_agent.provider_request", requestDiagnostics);
 			const stream = streamSimple(model, llmContext as Parameters<typeof streamSimple>[1], options);
 			const originalResult = stream.result.bind(stream);
 			stream.result = async () => {

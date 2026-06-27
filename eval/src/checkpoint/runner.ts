@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
 import { runCheckpointEditor } from "../../../src/agents/checkpoint-editor/agent.js";
-import type { MemoryAgentUsage } from "../../../src/agents/common.js";
+import type { MemoryAgentRequestDiagnostics, MemoryAgentUsage } from "../../../src/agents/common.js";
 import { normalizeUsage, PI_USAGE_RECORDED, type UsageRecordedData } from "../../../src/usage.js";
 import { runSessionReplayCase } from "./session-replay.js";
 import type { EditorEvalCase, EvalCase, EvalRecord, EvalSummary, EvalUsageBucket, EvalUsageSummary, SessionReplayEvalCase } from "./types.js";
@@ -92,6 +92,7 @@ export async function resolveModel(spec: string): Promise<ResolvedEvalModel> {
 async function runEditorCase(testCase: EditorEvalCase, resolved: ResolvedEvalModel, thinking: ModelThinkingLevel, iteration: number): Promise<EvalRecord> {
 	const started = Date.now();
 	const usage: MemoryAgentUsage[] = [];
+	const requestDiagnostics: MemoryAgentRequestDiagnostics[] = [];
 	const dir = await mkdtemp(join(tmpdir(), "om-checkpoint-eval-"));
 	try {
 		const result = await runCheckpointEditor({
@@ -105,6 +106,8 @@ async function runEditorCase(testCase: EditorEvalCase, resolved: ResolvedEvalMod
 			thinkingLevel: thinking,
 			maxTurns: testCase.maxTurns ?? 6,
 			onUsage: (entry) => usage.push(entry),
+			onRequestDiagnostics: (entry) => requestDiagnostics.push(entry),
+			pruneSizeGuidance: testCase.pruneSizeGuidance,
 		});
 		const grade = testCase.grade(result);
 		const usageSummary = summarizeEvalUsage(usage.map((entry) => ({ agent: entry.agent, operation: entry.agent, usage: entry.usage })));
@@ -119,6 +122,7 @@ async function runEditorCase(testCase: EditorEvalCase, resolved: ResolvedEvalMod
 			changed: result?.changed,
 			content: result?.content,
 			usage,
+			requestDiagnostics,
 			usageSummary,
 			checkpointEditorMetrics: result?.metrics,
 			durationMs: Date.now() - started,
@@ -127,7 +131,7 @@ async function runEditorCase(testCase: EditorEvalCase, resolved: ResolvedEvalMod
 			observationsText: testCase.observationsText,
 		};
 	} catch (error) {
-		return runtimeErrorRecord(testCase.id, "editor", iteration, started, usage, error, testCase.metadata);
+		return runtimeErrorRecord(testCase.id, "editor", iteration, started, usage, error, testCase.metadata, requestDiagnostics);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}
@@ -169,7 +173,16 @@ async function runReplayCase(testCase: SessionReplayEvalCase, resolved: Resolved
 	}
 }
 
-function runtimeErrorRecord(id: string, kind: "editor" | "session-replay", iteration: number, started: number, usage: MemoryAgentUsage[], error: unknown, metadata: Record<string, unknown> | undefined): EvalRecord {
+function runtimeErrorRecord(
+	id: string,
+	kind: "editor" | "session-replay",
+	iteration: number,
+	started: number,
+	usage: MemoryAgentUsage[],
+	error: unknown,
+	metadata: Record<string, unknown> | undefined,
+	requestDiagnostics?: MemoryAgentRequestDiagnostics[],
+): EvalRecord {
 	return {
 		kind,
 		id,
@@ -179,6 +192,7 @@ function runtimeErrorRecord(id: string, kind: "editor" | "session-replay", itera
 		missing: [],
 		incorrect: [],
 		usage,
+		requestDiagnostics,
 		durationMs: Date.now() - started,
 		error: error instanceof Error ? error.message : String(error),
 		metadata,
@@ -232,6 +246,36 @@ export function summarizeRecords(args: {
 	};
 }
 
+function shrinkPercent(record: EvalRecord): string {
+	if (!record.initialContent || !record.content || record.initialContent.length === 0) return "n/a";
+	return `${Math.round(((record.initialContent.length - record.content.length) / record.initialContent.length) * 10_000) / 100}%`;
+}
+
+function requestCount(record: EvalRecord): number {
+	return record.usageSummary?.byAgent["checkpoint-editor"]?.requests ?? record.usage.length;
+}
+
+function printPruneDiagnosticTable(records: EvalRecord[]): void {
+	const diagnosticRecords = records.filter((record) => record.metadata?.pruneDiagnostic === true);
+	if (diagnosticRecords.length === 0) return;
+	console.log("\nprune diagnostics:");
+	console.log("case | fixture | variant | duration | requests | shrink | failed edits | oldText chars | newText chars");
+	for (const record of diagnosticRecords) {
+		const metrics = record.checkpointEditorMetrics;
+		console.log([
+			record.id,
+			String(record.metadata?.fixtureType ?? "unknown"),
+			String(record.metadata?.promptVariant ?? "unknown"),
+			`${record.durationMs}ms`,
+			String(requestCount(record)),
+			shrinkPercent(record),
+			String(metrics?.failedEditCalls ?? "n/a"),
+			String(metrics?.editOldTextChars ?? "n/a"),
+			String(metrics?.editNewTextChars ?? "n/a"),
+		].join(" | "));
+	}
+}
+
 export function printSummary(summary: EvalSummary, records: EvalRecord[]): void {
 	console.log(`checkpoint evals: ${summary.passed}/${summary.total} passed`);
 	for (const record of records) {
@@ -242,6 +286,7 @@ export function printSummary(summary: EvalSummary, records: EvalRecord[]): void 
 		if (record.incorrect.length) console.log(`  incorrect: ${record.incorrect.join(", ")}`);
 		if (record.error) console.log(`  error: ${record.error}`);
 	}
+	printPruneDiagnosticTable(records);
 }
 
 export async function writeArtifacts(outDir: string, summary: EvalSummary, records: EvalRecord[]): Promise<void> {

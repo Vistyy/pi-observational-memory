@@ -1,4 +1,4 @@
-import type { MemoryAgentUsage } from "../../../src/agents/common.js";
+import type { MemoryAgentRequestDiagnostics, MemoryAgentUsage } from "../../../src/agents/common.js";
 import type { CheckpointEditorMetrics, CheckpointEditorResult } from "../../../src/agents/checkpoint-editor/agent.js";
 import type { Config } from "../../../src/config.js";
 import type { Checkpoint, Entry, Observation } from "../../../src/session-ledger/index.js";
@@ -19,6 +19,7 @@ export type EditorEvalCase = {
 	initialContent: string;
 	observationsText: string;
 	maxTurns?: number;
+	pruneSizeGuidance?: string;
 	metadata?: Record<string, unknown>;
 	grade: (result: CheckpointEditorResult | undefined) => Grade;
 };
@@ -79,6 +80,7 @@ export type EvalRecord = {
 	changed?: boolean;
 	content?: string;
 	usage: MemoryAgentUsage[];
+	requestDiagnostics?: MemoryAgentRequestDiagnostics[];
 	usageSummary?: EvalUsageSummary;
 	checkpointEditorMetrics?: CheckpointEditorMetrics;
 	durationMs: number;

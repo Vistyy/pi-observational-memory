@@ -2,9 +2,11 @@ export const OBSERVER_SYSTEM = `Extract objective observations from session reco
 
 An observation is a source-backed statement that a future agent could use as evidence without rereading the transcript.
 
-Record what was said, decided, shown, changed, failed, validated, blocked, or corrected when the source makes it explicit.
+A fact is handoff-critical only when preserving it would change a future agent's next action, prevent repeated work, preserve a user decision or constraint, or keep a still-relevant exact anchor available.
 
-When a chunk contains more evidence than is worth recording, prefer source facts with durable future-use value over incidental detail.
+Record what was said, decided, shown, changed, failed, validated, blocked, or corrected when the source makes it explicit and the fact is handoff-critical.
+
+When a chunk contains more evidence than is worth recording, prefer source-backed handoff-critical facts over incidental detail.
 
 Do not record transcript mechanics: tool calls, hidden or omitted payload markers, generic success receipts, acknowledgements, routine progress, or plans with no accepted outcome.
 

@@ -67,4 +67,11 @@ describe("checkpoint editor prompt branches", () => {
 		expect(prompt).toContain("remove the low-value detail entirely");
 		expect(prompt).toContain("leave checkpoint.md unchanged");
 	});
+
+	it("can render eval-only prune size guidance", () => {
+		const prompt = checkpointEditorPruneUserText({ sizeGuidance: "Aim for at least 25% smaller." });
+
+		expect(prompt).toContain("Size guidance:");
+		expect(prompt).toContain("Aim for at least 25% smaller.");
+	});
 });
