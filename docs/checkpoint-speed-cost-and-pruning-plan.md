@@ -88,6 +88,9 @@ Add these criteria before optimizing the implementation:
 - Compaction-pressure prune must have a hard timeout or deterministic fallback.
 - Large-checkpoint prune evals must record wall time, request count, token usage, and CheckpointEditor tool metrics.
 - A prune that cannot finish inside the budget must fail safely and leave the previous checkpoint intact.
+- Compaction should proceed with the current valid checkpoint even when it is oversized.
+- Compaction should start or leave background prune work for later, then use the smaller checkpoint only after prune finishes safely.
+- Compaction should cancel only when no valid checkpoint handoff exists.
 - Prune must preserve handoff-critical facts.
 - Prune must remove stale, duplicate, or non-handoff-critical detail.
 
@@ -376,5 +379,5 @@ The useful idea is the durable replacement snapshot and tail replay model.
 7. Rewrite the Observer, CheckpointEditor update, CheckpointEditor prune, and compaction handoff prompts as one coherent prompt set.
 8. Change prune from exact edit mechanics to write mechanics.
 9. Make health prune run in the background instead of blocking interactive paths.
-10. Stop compaction-pressure from blocking indefinitely on hard-max CheckpointEditor prune.
+10. Stop compaction-pressure from blocking indefinitely on hard-max CheckpointEditor prune by compacting with the current valid checkpoint and pruning later.
 11. Only then test edit-history redaction for update, deterministic fallback, or terminal write variants.
