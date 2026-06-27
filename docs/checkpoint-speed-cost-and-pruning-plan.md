@@ -298,13 +298,34 @@ For this project, compaction should not depend on slow CheckpointEditor pruning.
 
 Checkpoint pruning should improve the future checkpoint, not gate compaction unless there is no safe alternative.
 
+Pi already handles the ledger tail after compaction, so this project does not need to rebuild Codex tail replay itself.
+
+The main thing to copy is the compaction handoff message shape.
+
+Codex frames compaction as a handoff summary for another LLM that will resume the task.
+
+Our compaction message should get closer to that framing while using the current checkpoint as the source.
+
+The compaction handoff should say, in effect:
+
+```text
+This is a checkpoint handoff for the next LLM.
+Use it to resume without repeating work.
+It contains current progress, decisions, constraints, next steps, and critical references.
+```
+
+Do not generate a second summary from scratch when a checkpoint already exists.
+
+Render the current checkpoint as the handoff message.
+
+If the checkpoint is oversized, a stale or large checkpoint is still better than blocking compaction on a slow prune.
+
 The likely long-term shape is:
 
 1. use the current checkpoint as the compaction handoff snapshot
-2. persist a durable compact snapshot for the current branch or session window
-3. rebuild fork or resume context from newest compact snapshot plus later ledger tail
-4. run checkpoint pruning separately in the background
-5. use the smaller checkpoint later if pruning finishes safely
+2. rely on Pi's existing compaction tail replay for later ledger entries
+3. run checkpoint pruning separately in the background
+4. use the smaller checkpoint later if pruning finishes safely
 
 Do not copy Codex blindly.
 
