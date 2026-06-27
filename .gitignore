@@ -4,3 +4,6 @@ node_modules/
 
 # Eval outputs
 runs/
+
+# Lavish review artifacts
+.lavish/
