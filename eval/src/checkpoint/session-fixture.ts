@@ -1,0 +1,59 @@
+import { readFileSync } from "node:fs";
+import { renderObservationsForCheckpointEditor } from "../../../src/memory/checkpoint.js";
+import type { Checkpoint, Entry, Observation } from "../../../src/session-ledger/index.js";
+
+export const DEFAULT_REAL_SESSION_PATH = "/home/syzom/.pi/agent/sessions/--home-syzom-.pi-agent--/2026-06-25T13-09-04-858Z_019efee5-f8da-7fe4-a4a8-91009462be14.jsonl";
+
+function readJsonl(path: string): Entry[] {
+	return readFileSync(path, "utf-8")
+		.split(/\r?\n/)
+		.filter(Boolean)
+		.map((line) => JSON.parse(line) as Entry);
+}
+
+function checkpointEntryContent(entry: Entry): Checkpoint | undefined {
+	const data = entry.data as { checkpoint?: unknown } | undefined;
+	const checkpoint = data?.checkpoint as Checkpoint | undefined;
+	return checkpoint?.content ? checkpoint : undefined;
+}
+
+function observationsEntryContent(entry: Entry): Observation[] | undefined {
+	const data = entry.data as { observations?: unknown } | undefined;
+	return Array.isArray(data?.observations) ? data.observations as Observation[] : undefined;
+}
+
+export function loadCheckpointFromSession(path: string, entryId: string): Checkpoint {
+	const entry = readJsonl(path).find((candidate) => candidate.id === entryId);
+	if (!entry) throw new Error(`session fixture checkpoint entry not found: ${entryId}`);
+	const checkpoint = checkpointEntryContent(entry);
+	if (!checkpoint) throw new Error(`session fixture entry is not a checkpoint: ${entryId}`);
+	return checkpoint;
+}
+
+export function loadObservationsFromSession(path: string, entryId: string): Observation[] {
+	const entry = readJsonl(path).find((candidate) => candidate.id === entryId);
+	if (!entry) throw new Error(`session fixture observations entry not found: ${entryId}`);
+	const observations = observationsEntryContent(entry);
+	if (!observations) throw new Error(`session fixture entry is not observations: ${entryId}`);
+	return observations;
+}
+
+export function loadCheckpointUpdateFixture(args: {
+	sessionPath?: string;
+	checkpointEntryId: string;
+	observationsEntryId: string;
+}): { initialContent: string; observationsText: string; metadata: Record<string, unknown> } {
+	const sessionPath = args.sessionPath ?? DEFAULT_REAL_SESSION_PATH;
+	const checkpoint = loadCheckpointFromSession(sessionPath, args.checkpointEntryId);
+	const observations = loadObservationsFromSession(sessionPath, args.observationsEntryId);
+	return {
+		initialContent: checkpoint.content,
+		observationsText: renderObservationsForCheckpointEditor(observations),
+		metadata: {
+			sessionPath,
+			checkpointEntryId: args.checkpointEntryId,
+			observationsEntryId: args.observationsEntryId,
+			observationIds: observations.map((observation) => observation.id),
+		},
+	};
+}
