@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { Runtime } from "../runtime.js";
-import { foldLedger, sourceEntriesAfterIndex, type Entry } from "../session-ledger/index.js";
+import { planObserverRecordBatch } from "../memory/serialization/observer.js";
+import { foldLedger, type Entry } from "../session-ledger/index.js";
 import { PI_USAGE_RECORDED, normalizeUsage, type UsageTotals } from "../usage.js";
 
 type UsageSummary = {
@@ -66,7 +67,14 @@ export async function runStatusCommand(args: unknown, ctx: any, runtime: Runtime
 	const entries = ctx.sessionManager.getBranch() as Entry[];
 	const folded = foldLedger(entries);
 	const checkpoint = folded.checkpoint;
-	const sourceGap = sourceEntriesAfterIndex(entries, folded.lastObservationCoverageIndex).length;
+	const pendingObserverEntries = entries.slice(folded.lastObservationCoverageIndex + 1);
+	const observeGap = planObserverRecordBatch(pendingObserverEntries, {
+		toolResultSummaryMaxLines: runtime.config.observerToolResultSummaryMaxLines,
+		toolResultErrorMaxLines: runtime.config.observerToolResultErrorMaxLines,
+		toolResultLineMaxChars: runtime.config.observerToolResultLineMaxChars,
+		toolOutputPolicies: runtime.config.observerToolOutputPolicies,
+		allowTailIncompleteToolCalls: true,
+	}).recordCount;
 	const checkpointGap = folded.uncheckpointedObservations.length;
 	const lines = [
 		"── Checkpoint ──",
@@ -75,7 +83,7 @@ export async function runStatusCommand(args: unknown, ctx: any, runtime: Runtime
 		`Coverage:     ${folded.lastCheckpointCoverageObservationId ?? "none"}`,
 		"",
 		"── Next work ──",
-		`Observe gap:    ${sourceGap.toLocaleString()} source entries`,
+		`Observe gap:    ${observeGap.toLocaleString()} records`,
 		`Checkpoint gap: ${checkpointGap.toLocaleString()} observations`,
 	];
 

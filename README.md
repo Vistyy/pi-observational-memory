@@ -27,7 +27,7 @@ pi install git:github.com/Vistyy/pi-observational-memory@v0.1.2
 ## How it works
 
 ```text
-source entries
+session records
   -> observer: durable obs_* evidence
   -> checkpoint editor: rolling check_* Markdown checkpoint
   -> compaction: observer tail flush + checkpoint render

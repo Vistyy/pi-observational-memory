@@ -1,4 +1,4 @@
-export const OBSERVER_SYSTEM = `Extract objective observations from session source entries.
+export const OBSERVER_SYSTEM = `Extract objective observations from session records.
 
 An observation is a source-backed statement that a future agent could use as evidence without rereading the transcript.
 

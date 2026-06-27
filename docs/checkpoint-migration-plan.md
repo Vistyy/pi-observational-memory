@@ -7,13 +7,13 @@ Replace OM's active reflection pool with rolling checkpoints as the primary mode
 The target pipeline is:
 
 ```text
-source entries -> observations -> checkpoint
+session records -> observations -> checkpoint
 ```
 
 The old pipeline is removed:
 
 ```text
-source entries -> observations -> reflections -> maintainer/rewrite
+session records -> observations -> reflections -> maintainer/rewrite
 ```
 
 The checkpoint must support both forks and main-thread compaction.
@@ -112,7 +112,9 @@ CheckpointEditor must read `checkpoint.md`, edit only that file, and finish by c
 
 Normal final prose is not completion.
 
-If the model edits the draft but does not call `finish_checkpoint_edit`, OM discards the draft and does not advance coverage.
+If the model leaves a valid draft but does not call `finish_checkpoint_edit`, OM runs a finish-only retry that asks it to read the draft and call `finish_checkpoint_edit`.
+
+If `finish_checkpoint_edit` is still not called, OM discards the draft and does not advance coverage.
 
 OM reads the draft after `finish_checkpoint_edit`.
 
@@ -418,7 +420,7 @@ For longer arguments, render the first 5 lines, an omitted-line marker, and the 
 
 Use the per-line truncation suffix `…[trunc]`, and only add it when it actually saves space.
 
-The observer prompt should say not to infer facts from omitted output.
+The observer prompt should say not to infer facts from truncated or omitted portions of rendered tool output.
 
 Only facts supported by visible lines and command/status metadata should be recorded.
 
@@ -441,7 +443,7 @@ CheckpointEditor eval cases include first checkpoint, rolling update, no-change 
 Replay ledger fixtures:
 
 ```text
-source entries -> observer -> checkpoint updates -> final checkpoint
+session records -> observations -> checkpoint updates -> final checkpoint
 ```
 
 Use the audited real failure session and synthetic unrelated domains.
@@ -482,7 +484,9 @@ Use a requested rerun flag so work that arrives during an in-flight update is pr
 
 Require `finish_checkpoint_edit`.
 
-Discard edited drafts that never call the finish tool.
+Run a finish-only retry for valid drafts that did not finish.
+
+Discard edited drafts that still never call the finish tool.
 
 ### Coverage confusion
 

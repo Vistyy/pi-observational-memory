@@ -26,6 +26,10 @@ function setup(args: { entries: TestEntry[]; runtime?: Partial<Runtime> }) {
 			strategy: "replacement",
 			observeEveryMessages: 8,
 			observeHardCapRecords: 32,
+			observerToolResultSummaryMaxLines: 4,
+			observerToolResultErrorMaxLines: 20,
+			observerToolResultLineMaxChars: 300,
+			observerToolOutputPolicies: {},
 		},
 		memoryUpdateInFlight: false,
 		memoryUpdatePhase: undefined,
@@ -55,7 +59,7 @@ describe("/om:status", () => {
 
 		expect(output).toContain("── Checkpoint ──");
 		expect(output).toContain("Current:      none");
-		expect(output).toContain("Observe gap:    0 source entries");
+		expect(output).toContain("Observe gap:    0 records");
 		expect(output).toContain("Checkpoint gap: 0 observations");
 		expect(output).not.toContain("Strategy:");
 	});
