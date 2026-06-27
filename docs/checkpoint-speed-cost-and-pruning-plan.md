@@ -169,6 +169,18 @@ The evals should be diagnostic-only for latency at first.
 
 They should report whether pruning exceeded the interactive latency budget, but they should not fail on latency until a baseline has been measured and an explicit budget has been chosen.
 
+The eval report should include a compact diagnostic table with:
+
+- case id
+- fixture type
+- prompt variant
+- duration
+- request count
+- shrink percentage
+- failed edit count
+- total edit `oldText` chars
+- total edit `newText` chars
+
 ## CheckpointEditor cost question
 
 The current cost concern is request count more than per-request size.
