@@ -147,11 +147,13 @@ The evals should fail if pruning destroys required handoff facts.
 
 The evals should require a clear checkpoint size reduction, but they should not initially require pruning below the normal target or hard max.
 
-The first diagnostic run should compare several prompt guidance variants:
+The first diagnostic run should compare several prompt guidance variants on both the synthetic fixture and the real-latest fixture:
 
 1. no extra size guidance, using the current prune prompt as the baseline
 2. soft shrink guidance, aiming for at least 25% smaller while making preservation of handoff-critical facts more important than hitting the target
 3. soft budget guidance, aiming for the normal 4k token checkpoint target while making preservation of handoff-critical facts more important than hitting the budget
+
+This produces six initial diagnostic cases.
 
 The guided variants must stay eval variants until they prove they improve shrink quality without losing important facts.
 
