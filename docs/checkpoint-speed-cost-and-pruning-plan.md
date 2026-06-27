@@ -93,9 +93,30 @@ Existing prune evals cover basic behavior on small synthetic checkpoints.
 
 They do not prove that pruning a large checkpoint is fast enough.
 
-Add a large-checkpoint prune eval before changing pruning behavior.
+Add large-checkpoint prune evals before changing pruning behavior.
 
-The eval should include:
+Add two diagnostic evals:
+
+1. `checkpoint-prune-large-synthetic-diagnostic`
+2. `checkpoint-prune-real-latest-diagnostic`
+
+The synthetic eval should use a controlled 12k to 16k token checkpoint.
+
+It should include repeated stale bloat, duplicate detail, and handoff-critical anchors that must survive.
+
+The real-latest eval should load the latest checkpoint from the local session fixture:
+
+```text
+/home/syzom/.pi/agent/sessions/--home-syzom-.pi-agent--/2026-06-25T13-09-04-858Z_019efee5-f8da-7fe4-a4a8-91009462be14.jsonl
+```
+
+Do not commit the real checkpoint content as a fixture.
+
+Load it from the local JSONL session file at eval runtime.
+
+The referenced latest checkpoint is suitable because it is roughly 34k chars and above the default hard max by rough token estimate.
+
+Both evals should include:
 
 - a checkpoint above the normal prune target
 - a checkpoint above the hard max target
@@ -103,9 +124,12 @@ The eval should include:
 - handoff-critical details that must survive
 - stale details that must be removed
 - duration metrics
+- per-request duration metrics
+- request context size estimates
 - CheckpointEditor read calls
 - CheckpointEditor edit calls
 - successful and failed edit calls
+- edit failure reason counts
 - total edit `oldText` chars
 - total edit `newText` chars
 - finish calls
@@ -117,9 +141,9 @@ The eval should include:
 - cache read tokens
 - cache write tokens
 
-The eval should fail if pruning destroys required handoff facts.
+The evals should fail if pruning destroys required handoff facts.
 
-The eval should separately report whether it exceeded the interactive latency budget.
+The evals should separately report whether pruning exceeded the interactive latency budget.
 
 ## CheckpointEditor cost question
 
@@ -196,9 +220,10 @@ Do not trade away checkpoint quality for small savings.
 
 ## Recommended implementation order
 
-1. Add a red-capable large-checkpoint prune performance eval.
-2. Verify current baseline metrics for update, prune, and session replay.
-3. Add prompt gate updates if they are not already present.
-4. Add or verify checkpoint cadence thresholds.
-5. Make health prune defer, skip, or time out in interactive paths.
-6. Only then test edit-history redaction or terminal edit variants.
+1. Add red-capable synthetic and real-latest large-checkpoint prune diagnostic evals.
+2. Add missing diagnostic metrics needed to explain prune slowness.
+3. Verify current baseline metrics for update, prune, and session replay.
+4. Add prompt gate updates if they are not already present.
+5. Add or verify checkpoint cadence thresholds.
+6. Make health prune run in the background instead of blocking interactive paths.
+7. Only then test edit-history redaction, deterministic fallback, or terminal edit variants.
