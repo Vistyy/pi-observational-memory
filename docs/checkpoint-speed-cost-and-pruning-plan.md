@@ -143,7 +143,9 @@ Both evals should include:
 
 The evals should fail if pruning destroys required handoff facts.
 
-The evals should separately report whether pruning exceeded the interactive latency budget.
+The evals should be diagnostic-only for latency at first.
+
+They should report whether pruning exceeded the interactive latency budget, but they should not fail on latency until a baseline has been measured and an explicit budget has been chosen.
 
 ## CheckpointEditor cost question
 
