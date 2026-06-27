@@ -70,7 +70,6 @@ function errorResult(text: string): any {
 export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promise<CheckpointEditorResult | undefined> {
 	await writeDraft(args.draftPath, args.initialContent);
 	let finishedReason: string | undefined;
-	let finishReminderCount = 0;
 
 	const readTool: AgentTool<typeof ReadSchema> = {
 		name: "read",
@@ -132,17 +131,6 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		},
 	};
 
-	const getAdditionalFollowUpMessages = async () => {
-		if (finishedReason || finishReminderCount >= 2) return [];
-		finishReminderCount++;
-		debugLog("checkpoint_editor.finish_reminder", { reminderCount: finishReminderCount });
-		return [{
-			role: "user" as const,
-			content: [{ type: "text" as const, text: "Continue with exactly one next action: if checkpoint.md is valid and complete for the pending observations, call finish_checkpoint_edit now; otherwise make the needed edit. Do not stop without finish_checkpoint_edit." }],
-			timestamp: Date.now(),
-		}];
-	};
-
 	await runMemoryAgentLoop({
 		model: args.model,
 		apiKey: args.apiKey,
@@ -158,11 +146,31 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		onUsage: args.onUsage,
 		requireToolCall: true,
 		toolCallReminder: "You must update checkpoint.md if needed and call finish_checkpoint_edit.",
-		getAdditionalFollowUpMessages,
 		maxNoToolRetries: 2,
 	});
 
-	const content = await readDraft(args.draftPath);
+	let content = await readDraft(args.draftPath);
+	if (!finishedReason && isValidCheckpointMarkdown(content)) {
+		debugLog("checkpoint_editor.finish_retry", { changed: content !== args.initialContent, contentChars: content.length });
+		await runMemoryAgentLoop({
+			model: args.model,
+			apiKey: args.apiKey,
+			headers: args.headers,
+			signal: args.signal,
+			agentLoop: args.agentLoop,
+			maxTurns: 2,
+			thinkingLevel: args.thinkingLevel,
+			systemPrompt: CHECKPOINT_EDITOR_SYSTEM,
+			userText: "checkpoint.md is valid after prior edits, but finish_checkpoint_edit was not called. Read checkpoint.md, then call finish_checkpoint_edit now with a concise reason. Do not edit unless the file is invalid.",
+			tools: [readTool as AgentTool<any>, finishTool as AgentTool<any>],
+			agentName: "checkpoint-editor",
+			onUsage: args.onUsage,
+			requireToolCall: true,
+			toolCallReminder: "You must call finish_checkpoint_edit for the valid checkpoint.md draft.",
+			maxNoToolRetries: 1,
+		});
+		content = await readDraft(args.draftPath);
+	}
 	if (!finishedReason) {
 		debugLog("checkpoint_editor.no_finish_draft", {
 			changed: content !== args.initialContent,
