@@ -8,12 +8,13 @@ describe("session-ledger summary rendering", () => {
 		expect(renderCheckpointSummary(undefined)).toBe("");
 	});
 
-	it("renders checkpoint summaries as current handoff core", () => {
+	it("renders checkpoint summaries as resume handoffs", () => {
 		const check = checkpoint("cccccccccccc", { content: checkpoint("cccccccccccc").content.replace("None known.", "Continue checkpoint migration.") });
 
 		const summary = renderCheckpointSummary(check);
 
-		expect(summary).toContain("The checkpoint below is the current handoff core.");
+		expect(summary).toContain("checkpoint handoff for another LLM");
+		expect(summary).toContain("continue without repeating work");
 		expect(summary).toContain("Continue checkpoint migration.");
 	});
 

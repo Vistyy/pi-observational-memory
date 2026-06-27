@@ -39,13 +39,15 @@ export type CheckpointEditorMetrics = {
 	};
 	editOldTextChars: number;
 	editNewTextChars: number;
+	writeCalls: number;
+	writeChars: number;
 	finishCalls: number;
 	finishRetryCount: number;
 };
 
 export type CheckpointEditorToolEvent = {
 	requestIndex: number | undefined;
-	tool: "read" | "edit" | "finish_checkpoint_edit";
+	tool: "read" | "edit" | "write" | "finish_checkpoint_edit";
 	durationMs: number;
 	ok: boolean;
 	errorReason?: "bad_path" | "old_text_not_found" | "old_text_not_unique" | "invalid_checkpoint";
@@ -74,6 +76,13 @@ const EditSchema = Type.Object({
 });
 
 type EditArgs = Static<typeof EditSchema>;
+
+const WriteSchema = Type.Object({
+	path: Type.String({ minLength: 1 }),
+	content: Type.String(),
+});
+
+type WriteArgs = Static<typeof WriteSchema>;
 
 const FinishSchema = Type.Object({
 	reason: Type.String({ minLength: 1 }),
@@ -113,6 +122,8 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		},
 		editOldTextChars: 0,
 		editNewTextChars: 0,
+		writeCalls: 0,
+		writeChars: 0,
 		finishCalls: 0,
 		finishRetryCount: 0,
 	};
@@ -187,6 +198,27 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		},
 	};
 
+	const writeTool: AgentTool<typeof WriteSchema> = {
+		name: "write",
+		label: "Write checkpoint draft",
+		description: "Replace checkpoint.md with full Markdown content. Only checkpoint.md is allowed.",
+		parameters: WriteSchema,
+		execute: async (_id, params: WriteArgs) => {
+			const started = Date.now();
+			metrics.writeCalls++;
+			metrics.writeChars += params.content.length;
+			if (!allowedPath(params.path)) {
+				emitToolEvent({ tool: "write", durationMs: Date.now() - started, ok: false, errorReason: "bad_path", contentChars: params.content.length });
+				debugLog("checkpoint_editor.tool_result", { tool: "write", ok: false, errorMessage: "Only checkpoint.md may be written.", contentChars: params.content.length });
+				return errorResult("Only checkpoint.md may be written.");
+			}
+			await writeDraft(args.draftPath, params.content);
+			emitToolEvent({ tool: "write", durationMs: Date.now() - started, ok: true, contentChars: params.content.length });
+			debugLog("checkpoint_editor.tool_result", { tool: "write", ok: true, contentChars: params.content.length, valid: isValidCheckpointMarkdown(params.content) });
+			return { content: [{ type: "text", text: "Wrote checkpoint.md." }] };
+		},
+	};
+
 	const finishTool: AgentTool<typeof FinishSchema> = {
 		name: "finish_checkpoint_edit",
 		label: "Finish checkpoint edit",
@@ -211,6 +243,12 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 	const userText = args.purpose === "prune"
 		? checkpointEditorPruneUserText({ sizeGuidance: args.pruneSizeGuidance })
 		: checkpointEditorUpdateUserText({ observationsText: args.observationsText });
+	const tools = args.purpose === "prune"
+		? [readTool as AgentTool<any>, writeTool as AgentTool<any>, finishTool as AgentTool<any>]
+		: [readTool as AgentTool<any>, editTool as AgentTool<any>, finishTool as AgentTool<any>];
+	const toolCallReminder = args.purpose === "prune"
+		? "You must read checkpoint.md, write the full pruned checkpoint.md if needed, and call finish_checkpoint_edit."
+		: "You must update checkpoint.md if needed and call finish_checkpoint_edit.";
 
 	await runMemoryAgentLoop({
 		model: args.model,
@@ -222,12 +260,12 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		thinkingLevel: args.thinkingLevel,
 		systemPrompt: CHECKPOINT_EDITOR_SYSTEM,
 		userText,
-		tools: [readTool as AgentTool<any>, editTool as AgentTool<any>, finishTool as AgentTool<any>],
+		tools,
 		agentName: "checkpoint-editor",
 		onUsage: args.onUsage,
 		onRequestDiagnostics: handleRequestDiagnostics,
 		requireToolCall: true,
-		toolCallReminder: "You must update checkpoint.md if needed and call finish_checkpoint_edit.",
+		toolCallReminder,
 		maxNoToolRetries: 2,
 	});
 
@@ -244,7 +282,7 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 			maxTurns: 2,
 			thinkingLevel: args.thinkingLevel,
 			systemPrompt: CHECKPOINT_EDITOR_SYSTEM,
-			userText: "checkpoint.md is valid after prior edits, but finish_checkpoint_edit was not called. Read checkpoint.md, then call finish_checkpoint_edit now with a concise reason. Do not edit unless the file is invalid.",
+			userText: "checkpoint.md is valid after prior changes, but finish_checkpoint_edit was not called. Read checkpoint.md, then call finish_checkpoint_edit now with a concise reason. Do not change the file unless it is invalid.",
 			tools: [readTool as AgentTool<any>, finishTool as AgentTool<any>],
 			agentName: "checkpoint-editor",
 			onUsage: args.onUsage,

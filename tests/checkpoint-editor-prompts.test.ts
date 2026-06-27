@@ -47,6 +47,7 @@ describe("checkpoint editor prompt branches", () => {
 		expect(prompt).toContain("Pending observations:");
 		expect(prompt).toContain(SENTINEL_OBSERVATION);
 		expect(prompt).toContain("patch to merge");
+		expect(prompt).toContain("handoff-critical content");
 	});
 
 	it("does not render observation framing for prune", () => {
@@ -55,17 +56,16 @@ describe("checkpoint editor prompt branches", () => {
 		expect(prompt).toContain("Purpose: prune");
 		expect(prompt).not.toContain("Pending observations:");
 		expect(prompt).not.toContain(SENTINEL_OBSERVATION);
-		expect(prompt).toContain("without adding facts");
-		expect(prompt).toContain("Do not change the meaning");
-		expect(prompt).toContain("Remove observation id lists and source entry id lists");
+		expect(prompt).toContain("Do not add facts");
+		expect(prompt).toContain("Use write to replace checkpoint.md");
 	});
 
-	it("keeps prune prompt focused on shrinking or repair", () => {
+	it("keeps prune prompt focused on a smaller handoff rewrite", () => {
 		const prompt = checkpointEditorPruneUserText();
 
-		expect(prompt).toContain("make it smaller, clearer, or better repaired");
-		expect(prompt).toContain("remove the low-value detail entirely");
-		expect(prompt).toContain("leave checkpoint.md unchanged");
+		expect(prompt).toContain("smaller handoff");
+		expect(prompt).toContain("another LLM that will resume this session");
+		expect(prompt).toContain("Preserve handoff-critical progress");
 	});
 
 	it("can render eval-only prune size guidance", () => {

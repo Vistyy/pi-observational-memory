@@ -1,9 +1,11 @@
 import type { Checkpoint, Observation } from "./types.js";
 
-const CHECKPOINT_CONTEXT_USAGE_INSTRUCTIONS = `These are condensed memories from earlier in this session.
+const CHECKPOINT_CONTEXT_USAGE_INSTRUCTIONS = `This is a checkpoint handoff for another LLM that will resume this session.
 
-The checkpoint below is the current handoff core.
-It should be treated as current session memory unless the recent tail or user request supersedes it.`;
+Use it to continue without repeating work.
+It contains current progress, decisions, constraints, remaining work, and critical references.
+
+Treat it as current session memory unless the recent tail or user request supersedes it.`;
 
 export function observationToSummaryLine(observation: Observation): string {
 	return `[${observation.id}] ${observation.timestamp} ${observation.content}`;

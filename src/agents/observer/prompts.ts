@@ -1,34 +1,37 @@
-export const OBSERVER_SYSTEM = `Extract objective observations from session records.
+export const OBSERVER_SYSTEM = `Extract handoff-critical observations from session records.
 
-An observation is a source-backed statement that a future agent could use as evidence without rereading the transcript.
+An observation is one visible source fact that can help a future agent continue without rereading the transcript.
 
-A fact is handoff-critical only when preserving it would change a future agent's next action, prevent repeated work, preserve a user decision or constraint, or keep a still-relevant exact anchor available.
+A fact is handoff-critical when it would change a future agent's next action, prevent repeated work or a known mistake, preserve a user decision or constraint, explain current state or a decision, or provide an exact anchor needed to act.
 
-Record what was said, decided, shown, changed, failed, validated, blocked, or corrected when the source makes it explicit and the fact is handoff-critical.
+Record only facts that are both source-backed and handoff-critical.
 
-When a chunk contains more evidence than is worth recording, prefer source-backed handoff-critical facts over incidental detail.
+Prefer accepted decisions, active constraints, current objectives, completed work, validation results, failed attempts, blockers, stale-to-current corrections, and exact anchors.
 
-Do not record transcript mechanics: tool calls, hidden or omitted payload markers, generic success receipts, acknowledgements, routine progress, or plans with no accepted outcome.
+Exact anchors include paths, commands, errors, versions, URLs, ids, and numbers.
 
-Do not infer facts from truncated or omitted portions of rendered tool output.
-Only record facts supported by visible lines and command/status metadata.
+Do not record transcript mechanics, hidden or omitted payload markers, generic success receipts, acknowledgements, routine progress, speculation, or plans with no accepted outcome.
 
-Stay source-close. Do not infer beyond visible text. If the source is an assistant summary, say the assistant reported it.
+Do not infer from truncated or omitted tool output.
+Only use visible lines and command/status metadata.
 
-Use exact names, paths, commands, errors, ids, and numbers when they are part of the evidence.
+Stay source-close.
+If the source is an assistant summary, say the assistant reported it.
 
-Cite only the smallest supporting source ids shown in the chunk. If nothing would be useful evidence later, call record_observations with an empty observations array`;
+Cite the smallest supporting source ids shown in the chunk.
+Call record_observations once.
+Use an empty observations array when nothing is handoff-critical.`;
 
 export const OBSERVER_OBSERVATION_CONTENT_DESCRIPTION =
-	"One source-backed evidence atom. Stay close to what the source states or shows; include exact anchors when they are part of the evidence.";
+	"One source-backed, handoff-critical evidence atom. Stay close to what the source states or shows. Keep exact anchors exact.";
 
 export const OBSERVER_TOOL_DESCRIPTION =
-	"Record one complete batch of source-backed evidence observations. This tool call terminates the run.";
+	"Record one complete batch of handoff-critical observations. This tool call terminates the run.";
 
 export function observerUserText(now: string, conversation: string): string {
 	return `Current local time: ${now}
 
-Extract source-backed evidence observations from the following conversation chunk. Call record_observations once with all substantive source payloads, or with an empty observations array if there are none. Prefer inline conversation timestamps when assigning times; fall back to the current local time above only if no message timestamp applies.
+Extract handoff-critical observations from the following conversation chunk. Call record_observations once with all source-backed observations, or with an empty observations array if there are none. Prefer inline conversation timestamps when assigning times; fall back to the current local time above only if no message timestamp applies.
 
 NEW CONVERSATION CHUNK:
 ${conversation}`;

@@ -151,6 +151,8 @@ Both evals should include:
 - edit failure reason counts, adding them if only aggregate failed edit calls exist today
 - total edit `oldText` chars
 - total edit `newText` chars
+- CheckpointEditor write calls
+- total write chars
 - finish calls
 - finish retry count
 - total cost
@@ -201,6 +203,8 @@ The eval report should include a compact diagnostic table with:
 - failed edit count
 - total edit `oldText` chars
 - total edit `newText` chars
+- write calls
+- write chars
 
 ## CheckpointEditor cost question
 
@@ -208,7 +212,9 @@ The current cost concern is request count more than per-request size.
 
 Observer usually completes in one request.
 
-CheckpointEditor often uses `read -> edit -> finish_checkpoint_edit`.
+CheckpointEditor update often uses `read -> edit -> finish_checkpoint_edit`.
+
+CheckpointEditor prune should use `read -> write -> finish_checkpoint_edit`.
 
 If it makes multiple edits, each later request carries prior edit tool-call arguments.
 
@@ -234,6 +240,8 @@ Add or verify eval artifacts for:
 - successful and failed edit calls
 - total edit `oldText` chars
 - total edit `newText` chars
+- CheckpointEditor write calls
+- total write chars
 - finish calls
 - finish retry count
 - wall-clock duration by checkpoint operation

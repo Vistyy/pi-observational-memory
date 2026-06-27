@@ -264,7 +264,7 @@ function printPruneDiagnosticTable(records: EvalRecord[]): void {
 	const diagnosticRecords = records.filter((record) => record.metadata?.pruneDiagnostic === true);
 	if (diagnosticRecords.length === 0) return;
 	console.log("\nprune diagnostics:");
-	console.log("case | fixture | variant | duration | requests | shrink | failed edits | oldText chars | newText chars");
+	console.log("case | fixture | variant | duration | requests | shrink | failed edits | oldText chars | newText chars | write calls | write chars");
 	for (const record of diagnosticRecords) {
 		const metrics = record.checkpointEditorMetrics;
 		console.log([
@@ -277,6 +277,8 @@ function printPruneDiagnosticTable(records: EvalRecord[]): void {
 			String(metrics?.failedEditCalls ?? "n/a"),
 			String(metrics?.editOldTextChars ?? "n/a"),
 			String(metrics?.editNewTextChars ?? "n/a"),
+			String(metrics?.writeCalls ?? "n/a"),
+			String(metrics?.writeChars ?? "n/a"),
 		].join(" | "));
 	}
 }

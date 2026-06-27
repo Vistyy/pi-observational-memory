@@ -120,6 +120,34 @@ describe("runCheckpointEditor", () => {
 		})).resolves.toEqual(expect.objectContaining({ content: EMPTY_CHECKPOINT_MARKDOWN, reason: "already valid", changed: false }));
 	});
 
+	it("uses write for prune rewrites", async () => {
+		const path = await draftPath();
+		const next = EMPTY_CHECKPOINT_MARKDOWN.replace("None known.", "Pruned checkpoint handoff.");
+		const loop = fakeAgentLoop(async (_prompts, context) => {
+			const read = context.tools.find((tool) => tool.name === "read")!;
+			const write = context.tools.find((tool) => tool.name === "write")!;
+			const finish = context.tools.find((tool) => tool.name === "finish_checkpoint_edit")!;
+			expect(context.tools.some((tool) => tool.name === "edit")).toBe(false);
+			await read.execute("read-1", { path: "checkpoint.md" });
+			await write.execute("write-1", { path: "checkpoint.md", content: next });
+			await finish.execute("finish-1", { reason: "pruned handoff" });
+		});
+
+		await expect(runCheckpointEditor({
+			model: {},
+			apiKey: "test",
+			draftPath: path,
+			initialContent: EMPTY_CHECKPOINT_MARKDOWN,
+			observationsText: "None.",
+			purpose: "prune",
+			agentLoop: loop,
+		})).resolves.toEqual(expect.objectContaining({
+			content: next,
+			changed: true,
+			metrics: expect.objectContaining({ writeCalls: 1, writeChars: next.length, editCalls: 0 }),
+		}));
+	});
+
 	it("records edit failure reasons", async () => {
 		const path = await draftPath();
 		const toolEvents: Array<{ tool: string; ok: boolean; errorReason?: string }> = [];
@@ -138,7 +166,7 @@ describe("runCheckpointEditor", () => {
 			draftPath: path,
 			initialContent: EMPTY_CHECKPOINT_MARKDOWN,
 			observationsText: "None.",
-			purpose: "prune",
+			purpose: "update",
 			agentLoop: loop,
 			onToolEvent: (event) => toolEvents.push(event),
 		})).resolves.toEqual(expect.objectContaining({
