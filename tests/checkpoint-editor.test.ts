@@ -20,6 +20,33 @@ describe("runCheckpointEditor", () => {
 		return join(root, "checkpoint.md");
 	}
 
+	type TurnAction =
+		| { tool: "read"; params: { path: string } }
+		| { tool: "edit"; params: { path: string; oldText: string; newText: string } }
+		| { tool: "finish_checkpoint_edit"; params: { reason: string } }
+		| { tool: "none" };
+
+	function turnBasedAgentLoop(runs: TurnAction[][]) {
+		let runIndex = 0;
+		return fakeAgentLoop(async (_prompts, context, config) => {
+			const actions = runs[runIndex++] ?? [];
+			for (let i = 0; i < actions.length; i++) {
+				const action = actions[i];
+				if (action.tool === "none") {
+					const stop = config.shouldStopAfterTurn?.({ toolResults: [] }) ?? false;
+					await config.getFollowUpMessages?.();
+					if (stop) return;
+					continue;
+				}
+				const tool = context.tools.find((candidate) => candidate.name === action.tool)!;
+				const result = await tool.execute(`${action.tool}-${i}`, action.params) as any;
+				if (result?.terminate) return;
+				const stop = config.shouldStopAfterTurn?.({ toolResults: [{ isError: result?.isError === true }] }) ?? false;
+				if (stop) return;
+			}
+		});
+	}
+
 	it("edits a restricted checkpoint draft and finishes", async () => {
 		const path = await draftPath();
 		const next = EMPTY_CHECKPOINT_MARKDOWN.replace("None known.", "Implement checkpoint editor.");
@@ -45,6 +72,51 @@ describe("runCheckpointEditor", () => {
 
 		expect(result).toEqual({ content: next, reason: "updated objective", changed: true });
 		expect(await readFile(path, "utf-8")).toBe(next);
+	});
+
+	it("supports a realistic one-tool-per-turn edit workflow", async () => {
+		const path = await draftPath();
+		const next = EMPTY_CHECKPOINT_MARKDOWN.replace("None known.", "Implement checkpoint editor.");
+		const loop = turnBasedAgentLoop([[
+			{ tool: "read", params: { path: "checkpoint.md" } },
+			{ tool: "edit", params: { path: "checkpoint.md", oldText: EMPTY_CHECKPOINT_MARKDOWN, newText: next } },
+			{ tool: "finish_checkpoint_edit", params: { reason: "updated objective" } },
+		]]);
+
+		await expect(runCheckpointEditor({
+			model: {},
+			apiKey: "test",
+			draftPath: path,
+			initialContent: EMPTY_CHECKPOINT_MARKDOWN,
+			observationsText: "Observation 1: User asked for checkpoint editor.",
+			purpose: "update",
+			agentLoop: loop,
+		})).resolves.toEqual({ content: next, reason: "updated objective", changed: true });
+	});
+
+	it("supports a realistic finish retry after read-only first pass", async () => {
+		const path = await draftPath();
+		const loop = turnBasedAgentLoop([
+			[
+				{ tool: "read", params: { path: "checkpoint.md" } },
+				{ tool: "none" },
+				{ tool: "none" },
+			],
+			[
+				{ tool: "read", params: { path: "checkpoint.md" } },
+				{ tool: "finish_checkpoint_edit", params: { reason: "already valid" } },
+			],
+		]);
+
+		await expect(runCheckpointEditor({
+			model: {},
+			apiKey: "test",
+			draftPath: path,
+			initialContent: EMPTY_CHECKPOINT_MARKDOWN,
+			observationsText: "None.",
+			purpose: "prune",
+			agentLoop: loop,
+		})).resolves.toEqual({ content: EMPTY_CHECKPOINT_MARKDOWN, reason: "already valid", changed: false });
 	});
 
 	it("returns undefined when finish is not called", async () => {

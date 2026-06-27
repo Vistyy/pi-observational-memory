@@ -98,6 +98,40 @@ function gradeContent(result: CheckpointEditorResult | undefined, args: { requir
 
 const baseWithObjective = EMPTY_CHECKPOINT_MARKDOWN.replace("None known.", "Continue OM checkpoint migration.");
 
+const realisticSessionCheckpoint = `# Checkpoint
+
+## Current objective
+
+Improve the OM checkpoint architecture without losing broader session memory.
+
+## Progress and decisions
+
+- Memory lifecycle was deepened into \`MemoryLifecycle\`; Pi hooks should stay thin adapters.
+- Commit \`36dfa0c\` (\`Deepen memory lifecycle module\`) added \`src/memory-update/lifecycle.ts\`, moved the memory update hook to \`src/hooks/memory-update-hook.ts\`, removed old lifecycle files, removed lifecycle state from \`Runtime\`, and renamed tests to \`tests/memory-lifecycle.test.ts\`.
+- ObserverRecordPlanner is coherent but deferred; it should own observer record counting, safe cutoff, trigger rules, and compaction observer catch-up planning.
+- CheckpointEditor finish failures remain an active problem; warnings say \`Observational memory: checkpoint editor did not finish\`.
+- Checkpoint quality is under investigation because \`/om:view\` can collapse to only the latest task instead of preserving a session-wide handoff.
+
+## Important context
+
+- Tests should cover deterministic mechanics; evals should cover model and agent behavior.
+- Use real or realistic session material for checkpoint evals, including session \`019efee5-f8da-7fe4-a4a8-91009462be14\` when available.
+- Code should own mechanics, safety, validation, coverage, and workflow; agents should own semantic judgment and synthesis.
+
+## Remaining work
+
+- Add realistic CheckpointEditor evals that preserve still-active prior context while merging narrow new observations.
+- Add realistic loop tests for CheckpointEditor completion behavior.
+- Revisit ObserverRecordPlanner after checkpoint quality and finish reliability are addressed.
+
+## References and anchors
+
+- Session id: \`019efee5-f8da-7fe4-a4a8-91009462be14\`
+- Commit: \`36dfa0c\` \`Deepen memory lifecycle module\`
+- Files: \`src/memory-update/lifecycle.ts\`, \`src/hooks/memory-update-hook.ts\`, \`tests/memory-lifecycle.test.ts\`, \`src/agents/checkpoint-editor/agent.ts\`, \`src/agents/checkpoint-editor/prompts.ts\`
+- Commands: \`pnpm typecheck\`, \`pnpm test -- --reporter=dot\`, \`pnpm checkpoint-evals -- --model openai-codex/gpt-5.4-mini --thinking low\`
+`;
+
 const cases: EvalCase[] = [
 	{
 		id: "checkpoint-preserves-operational-anchors",
@@ -147,6 +181,40 @@ const cases: EvalCase[] = [
 		grade: (result) => gradeContent(result, {
 			requireUnchanged: true,
 			requireAll: ["exact commands", "paths", "ids", "blockers", "stale/current"],
+		}),
+	},
+	{
+		id: "checkpoint-preserves-session-wide-context",
+		purpose: "update",
+		initialContent: realisticSessionCheckpoint,
+		observationsText: [
+			"Observation 1:",
+			"id: obs_444444444444",
+			"time: 2026-06-27T12:54:00.000Z",
+			"sourceEntryIds: tool-1, assistant-1",
+			"content: Validation is green after the lifecycle refactor: `pnpm typecheck` ran `tsc --noEmit` successfully, `pnpm test -- --reporter=dot` passed with 14 test files and 87 tests, and `pnpm checkpoint-evals -- --model openai-codex/gpt-5.4-mini --thinking low` later passed all 3 checks after one earlier failure on missing `stale`.",
+			"",
+			"Observation 2:",
+			"id: obs_555555555555",
+			"time: 2026-06-27T12:55:00.000Z",
+			"sourceEntryIds: assistant-2",
+			"content: The latest narrow task is to keep the checkpoint aligned with the current memory-update test/lifecycle validation state.",
+		].join("\n"),
+		maxTurns: 8,
+		grade: (result) => gradeContent(result, {
+			requireChanged: true,
+			requireAll: [
+				"36dfa0c",
+				"MemoryLifecycle",
+				"ObserverRecordPlanner",
+				"checkpoint editor did not finish",
+				"/om:view",
+				"session-wide",
+				"019efee5-f8da-7fe4-a4a8-91009462be14",
+				"pnpm typecheck",
+				"pnpm test -- --reporter=dot",
+				"87",
+			],
 		}),
 	},
 ];
