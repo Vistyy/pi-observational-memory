@@ -122,6 +122,7 @@ describe("runCheckpointEditor", () => {
 
 	it("records edit failure reasons", async () => {
 		const path = await draftPath();
+		const toolEvents: Array<{ tool: string; ok: boolean; errorReason?: string }> = [];
 		const loop = fakeAgentLoop(async (_prompts, context) => {
 			const edit = context.tools.find((tool) => tool.name === "edit")!;
 			const finish = context.tools.find((tool) => tool.name === "finish_checkpoint_edit")!;
@@ -139,6 +140,7 @@ describe("runCheckpointEditor", () => {
 			observationsText: "None.",
 			purpose: "prune",
 			agentLoop: loop,
+			onToolEvent: (event) => toolEvents.push(event),
 		})).resolves.toEqual(expect.objectContaining({
 			changed: false,
 			metrics: expect.objectContaining({
@@ -150,6 +152,12 @@ describe("runCheckpointEditor", () => {
 				},
 			}),
 		}));
+		expect(toolEvents).toEqual([
+			expect.objectContaining({ tool: "edit", ok: false, errorReason: "bad_path" }),
+			expect.objectContaining({ tool: "edit", ok: false, errorReason: "old_text_not_found" }),
+			expect.objectContaining({ tool: "edit", ok: false, errorReason: "old_text_not_unique" }),
+			expect.objectContaining({ tool: "finish_checkpoint_edit", ok: true }),
+		]);
 	});
 
 	it("returns undefined when finish is not called", async () => {

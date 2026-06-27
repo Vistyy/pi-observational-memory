@@ -23,6 +23,7 @@ interface RunCheckpointEditorArgs {
 	thinkingLevel?: ModelThinkingLevel;
 	onUsage?: (usage: MemoryAgentUsage) => void;
 	onRequestDiagnostics?: (diagnostics: MemoryAgentRequestDiagnostics) => void;
+	onToolEvent?: (event: CheckpointEditorToolEvent) => void;
 	pruneSizeGuidance?: string;
 }
 
@@ -40,6 +41,17 @@ export type CheckpointEditorMetrics = {
 	editNewTextChars: number;
 	finishCalls: number;
 	finishRetryCount: number;
+};
+
+export type CheckpointEditorToolEvent = {
+	requestIndex: number | undefined;
+	tool: "read" | "edit" | "finish_checkpoint_edit";
+	durationMs: number;
+	ok: boolean;
+	errorReason?: "bad_path" | "old_text_not_found" | "old_text_not_unique" | "invalid_checkpoint";
+	oldTextChars?: number;
+	newTextChars?: number;
+	contentChars?: number;
 };
 
 export type CheckpointEditorResult = {
@@ -104,6 +116,14 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		finishCalls: 0,
 		finishRetryCount: 0,
 	};
+	let currentRequestIndex: number | undefined;
+	const emitToolEvent = (event: Omit<CheckpointEditorToolEvent, "requestIndex">) => {
+		args.onToolEvent?.({ requestIndex: currentRequestIndex, ...event });
+	};
+	const handleRequestDiagnostics = (diagnostics: MemoryAgentRequestDiagnostics) => {
+		currentRequestIndex = diagnostics.requestIndex;
+		args.onRequestDiagnostics?.(diagnostics);
+	};
 
 	const readTool: AgentTool<typeof ReadSchema> = {
 		name: "read",
@@ -111,12 +131,15 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		description: "Read checkpoint.md. Only checkpoint.md is allowed.",
 		parameters: ReadSchema,
 		execute: async (_id, params: ReadArgs) => {
+			const started = Date.now();
 			metrics.readCalls++;
 			if (!allowedPath(params.path)) {
+				emitToolEvent({ tool: "read", durationMs: Date.now() - started, ok: false, errorReason: "bad_path" });
 				debugLog("checkpoint_editor.tool_result", { tool: "read", ok: false, errorMessage: "Only checkpoint.md may be read." });
 				return errorResult("Only checkpoint.md may be read.");
 			}
 			const content = await readDraft(args.draftPath);
+			emitToolEvent({ tool: "read", durationMs: Date.now() - started, ok: true, contentChars: content.length });
 			debugLog("checkpoint_editor.tool_result", { tool: "read", ok: true, contentChars: content.length });
 			return { content: [{ type: "text", text: content }] };
 		},
@@ -128,12 +151,14 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		description: "Replace one exact text span in checkpoint.md. Only checkpoint.md is allowed.",
 		parameters: EditSchema,
 		execute: async (_id, params: EditArgs) => {
+			const started = Date.now();
 			metrics.editCalls++;
 			metrics.editOldTextChars += params.oldText.length;
 			metrics.editNewTextChars += params.newText.length;
 			if (!allowedPath(params.path)) {
 				metrics.failedEditCalls++;
 				metrics.editFailureReasons.badPath++;
+				emitToolEvent({ tool: "edit", durationMs: Date.now() - started, ok: false, errorReason: "bad_path", oldTextChars: params.oldText.length, newTextChars: params.newText.length });
 				debugLog("checkpoint_editor.tool_result", { tool: "edit", ok: false, errorMessage: "Only checkpoint.md may be edited." });
 				return errorResult("Only checkpoint.md may be edited.");
 			}
@@ -142,18 +167,21 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 			if (first === -1) {
 				metrics.failedEditCalls++;
 				metrics.editFailureReasons.oldTextNotFound++;
+				emitToolEvent({ tool: "edit", durationMs: Date.now() - started, ok: false, errorReason: "old_text_not_found", oldTextChars: params.oldText.length, newTextChars: params.newText.length, contentChars: current.length });
 				debugLog("checkpoint_editor.tool_result", { tool: "edit", ok: false, errorMessage: "oldText was not found in checkpoint.md.", oldTextChars: params.oldText.length, newTextChars: params.newText.length });
 				return errorResult("oldText was not found in checkpoint.md.");
 			}
 			if (current.indexOf(params.oldText, first + params.oldText.length) !== -1) {
 				metrics.failedEditCalls++;
 				metrics.editFailureReasons.oldTextNotUnique++;
+				emitToolEvent({ tool: "edit", durationMs: Date.now() - started, ok: false, errorReason: "old_text_not_unique", oldTextChars: params.oldText.length, newTextChars: params.newText.length, contentChars: current.length });
 				debugLog("checkpoint_editor.tool_result", { tool: "edit", ok: false, errorMessage: "oldText is not unique in checkpoint.md.", oldTextChars: params.oldText.length, newTextChars: params.newText.length });
 				return errorResult("oldText is not unique in checkpoint.md.");
 			}
 			const next = `${current.slice(0, first)}${params.newText}${current.slice(first + params.oldText.length)}`;
 			await writeDraft(args.draftPath, next);
 			metrics.successfulEditCalls++;
+			emitToolEvent({ tool: "edit", durationMs: Date.now() - started, ok: true, oldTextChars: params.oldText.length, newTextChars: params.newText.length, contentChars: next.length });
 			debugLog("checkpoint_editor.tool_result", { tool: "edit", ok: true, oldTextChars: params.oldText.length, newTextChars: params.newText.length, contentChars: next.length, valid: isValidCheckpointMarkdown(next) });
 			return { content: [{ type: "text", text: "Edited checkpoint.md." }] };
 		},
@@ -165,13 +193,16 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		description: "Finish the checkpoint edit after checkpoint.md is valid.",
 		parameters: FinishSchema,
 		execute: async (_id, params: FinishArgs) => {
+			const started = Date.now();
 			metrics.finishCalls++;
 			const content = await readDraft(args.draftPath);
 			if (!isValidCheckpointMarkdown(content)) {
+				emitToolEvent({ tool: "finish_checkpoint_edit", durationMs: Date.now() - started, ok: false, errorReason: "invalid_checkpoint", contentChars: content.length });
 				debugLog("checkpoint_editor.tool_result", { tool: "finish_checkpoint_edit", ok: false, errorMessage: "checkpoint.md is invalid or missing required headings.", contentChars: content.length });
 				return errorResult("checkpoint.md is invalid or missing required headings.");
 			}
 			finishedReason = params.reason;
+			emitToolEvent({ tool: "finish_checkpoint_edit", durationMs: Date.now() - started, ok: true, contentChars: content.length });
 			debugLog("checkpoint_editor.tool_result", { tool: "finish_checkpoint_edit", ok: true, reason: params.reason, changed: content !== args.initialContent, contentChars: content.length });
 			return { content: [{ type: "text", text: "Checkpoint edit finished." }], terminate: true };
 		},
@@ -194,7 +225,7 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		tools: [readTool as AgentTool<any>, editTool as AgentTool<any>, finishTool as AgentTool<any>],
 		agentName: "checkpoint-editor",
 		onUsage: args.onUsage,
-		onRequestDiagnostics: args.onRequestDiagnostics,
+		onRequestDiagnostics: handleRequestDiagnostics,
 		requireToolCall: true,
 		toolCallReminder: "You must update checkpoint.md if needed and call finish_checkpoint_edit.",
 		maxNoToolRetries: 2,
@@ -217,7 +248,7 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 			tools: [readTool as AgentTool<any>, finishTool as AgentTool<any>],
 			agentName: "checkpoint-editor",
 			onUsage: args.onUsage,
-			onRequestDiagnostics: args.onRequestDiagnostics,
+			onRequestDiagnostics: handleRequestDiagnostics,
 			requireToolCall: true,
 			toolCallReminder: "You must call finish_checkpoint_edit for the valid checkpoint.md draft.",
 			maxNoToolRetries: 1,

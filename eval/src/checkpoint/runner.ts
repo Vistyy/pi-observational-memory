@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
-import { runCheckpointEditor } from "../../../src/agents/checkpoint-editor/agent.js";
+import { runCheckpointEditor, type CheckpointEditorToolEvent } from "../../../src/agents/checkpoint-editor/agent.js";
 import type { MemoryAgentRequestDiagnostics, MemoryAgentUsage } from "../../../src/agents/common.js";
 import { normalizeUsage, PI_USAGE_RECORDED, type UsageRecordedData } from "../../../src/usage.js";
 import { runSessionReplayCase } from "./session-replay.js";
@@ -93,6 +93,7 @@ async function runEditorCase(testCase: EditorEvalCase, resolved: ResolvedEvalMod
 	const started = Date.now();
 	const usage: MemoryAgentUsage[] = [];
 	const requestDiagnostics: MemoryAgentRequestDiagnostics[] = [];
+	const checkpointEditorToolEvents: CheckpointEditorToolEvent[] = [];
 	const dir = await mkdtemp(join(tmpdir(), "om-checkpoint-eval-"));
 	try {
 		const result = await runCheckpointEditor({
@@ -107,6 +108,7 @@ async function runEditorCase(testCase: EditorEvalCase, resolved: ResolvedEvalMod
 			maxTurns: testCase.maxTurns ?? 6,
 			onUsage: (entry) => usage.push(entry),
 			onRequestDiagnostics: (entry) => requestDiagnostics.push(entry),
+			onToolEvent: (event) => checkpointEditorToolEvents.push(event),
 			pruneSizeGuidance: testCase.pruneSizeGuidance,
 		});
 		const grade = testCase.grade(result);
@@ -123,6 +125,7 @@ async function runEditorCase(testCase: EditorEvalCase, resolved: ResolvedEvalMod
 			content: result?.content,
 			usage,
 			requestDiagnostics,
+			checkpointEditorToolEvents,
 			usageSummary,
 			checkpointEditorMetrics: result?.metrics,
 			durationMs: Date.now() - started,
@@ -131,7 +134,7 @@ async function runEditorCase(testCase: EditorEvalCase, resolved: ResolvedEvalMod
 			observationsText: testCase.observationsText,
 		};
 	} catch (error) {
-		return runtimeErrorRecord(testCase.id, "editor", iteration, started, usage, error, testCase.metadata, requestDiagnostics);
+		return runtimeErrorRecord(testCase.id, "editor", iteration, started, usage, error, testCase.metadata, requestDiagnostics, checkpointEditorToolEvents);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}
@@ -182,6 +185,7 @@ function runtimeErrorRecord(
 	error: unknown,
 	metadata: Record<string, unknown> | undefined,
 	requestDiagnostics?: MemoryAgentRequestDiagnostics[],
+	checkpointEditorToolEvents?: CheckpointEditorToolEvent[],
 ): EvalRecord {
 	return {
 		kind,
@@ -193,6 +197,7 @@ function runtimeErrorRecord(
 		incorrect: [],
 		usage,
 		requestDiagnostics,
+		checkpointEditorToolEvents,
 		durationMs: Date.now() - started,
 		error: error instanceof Error ? error.message : String(error),
 		metadata,

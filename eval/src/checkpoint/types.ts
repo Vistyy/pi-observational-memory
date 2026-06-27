@@ -1,5 +1,5 @@
 import type { MemoryAgentRequestDiagnostics, MemoryAgentUsage } from "../../../src/agents/common.js";
-import type { CheckpointEditorMetrics, CheckpointEditorResult } from "../../../src/agents/checkpoint-editor/agent.js";
+import type { CheckpointEditorMetrics, CheckpointEditorResult, CheckpointEditorToolEvent } from "../../../src/agents/checkpoint-editor/agent.js";
 import type { Config } from "../../../src/config.js";
 import type { Checkpoint, Entry, Observation } from "../../../src/session-ledger/index.js";
 
@@ -81,6 +81,7 @@ export type EvalRecord = {
 	content?: string;
 	usage: MemoryAgentUsage[];
 	requestDiagnostics?: MemoryAgentRequestDiagnostics[];
+	checkpointEditorToolEvents?: CheckpointEditorToolEvent[];
 	usageSummary?: EvalUsageSummary;
 	checkpointEditorMetrics?: CheckpointEditorMetrics;
 	durationMs: number;
