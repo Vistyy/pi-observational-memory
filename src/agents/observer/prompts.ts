@@ -8,7 +8,7 @@ When a chunk contains more evidence than is worth recording, prefer source facts
 
 Do not record transcript mechanics: tool calls, hidden or omitted payload markers, generic success receipts, acknowledgements, routine progress, or plans with no accepted outcome.
 
-Do not infer facts from omitted tool output.
+Do not infer facts from truncated or omitted portions of rendered tool output.
 Only record facts supported by visible lines and command/status metadata.
 
 Stay source-close. Do not infer beyond visible text. If the source is an assistant summary, say the assistant reported it.
