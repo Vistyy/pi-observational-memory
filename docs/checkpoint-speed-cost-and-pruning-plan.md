@@ -151,7 +151,7 @@ The first diagnostic run should compare several prompt guidance variants:
 
 1. no extra size guidance, using the current prune prompt as the baseline
 2. soft shrink guidance, aiming for at least 25% smaller while making preservation of handoff-critical facts more important than hitting the target
-3. budget guidance, aiming for the normal 4k token checkpoint target while making preservation of handoff-critical facts more important than hitting the budget
+3. soft budget guidance, aiming for the normal 4k token checkpoint target while making preservation of handoff-critical facts more important than hitting the budget
 
 The guided variants must stay eval variants until they prove they improve shrink quality without losing important facts.
 
