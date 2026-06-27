@@ -6,8 +6,18 @@ import { serializeObserverSourceEntries } from "../memory/serialization/observer
 import type { Runtime } from "../runtime.js";
 import { OM_OBSERVATIONS_RECORDED, buildObservationsRecordedData, entryIndexById, foldLedger, sourceEntriesAfterIndex, type Entry, type Observation } from "../session-ledger/index.js";
 import { commonAgentArgs } from "./agent-args.js";
+import { runCheckpointStage } from "./checkpoint-stage.js";
 import { makeModelResolver } from "./model-resolver.js";
 import type { MemoryUpdateCtx } from "./types.js";
+
+function uncheckpointedObservationsBeforeIndex(entries: Entry[], firstKeptIndex: number): Observation[] {
+	const folded = foldLedger(entries);
+	const idToIndex = entryIndexById(entries);
+	return folded.uncheckpointedObservations.filter((observation) => observation.sourceEntryIds.some((sourceEntryId) => {
+		const sourceIndex = idToIndex.get(sourceEntryId);
+		return sourceIndex === undefined || sourceIndex < firstKeptIndex;
+	}));
+}
 
 export async function ensureObservedBeforeCompaction(
 	pi: ExtensionAPI,
@@ -32,6 +42,25 @@ export async function ensureObservedBeforeCompaction(
 		...sessionMetadata,
 		runId,
 	}, async () => runCompactionObserverFlush(pi, runtime, ctx, sourceEntries));
+}
+
+export async function ensureCheckpointedBeforeCompaction(
+	pi: ExtensionAPI,
+	runtime: Runtime,
+	ctx: MemoryUpdateCtx,
+	options: { firstKeptEntryId?: string } = {},
+): Promise<boolean> {
+	runtime.ensureConfig(ctx.cwd);
+	if (runtime.config.strategy === STRATEGY.off) return true;
+	const entries = ctx.sessionManager.getBranch() as Entry[];
+	const firstKeptIndex = entryIndexById(entries).get(options.firstKeptEntryId ?? "");
+	if (firstKeptIndex === undefined) return true;
+	const observations = uncheckpointedObservationsBeforeIndex(entries, firstKeptIndex);
+	if (observations.length === 0) return true;
+	const outcome = await runCheckpointStage(pi, runtime, ctx, makeModelResolver(runtime, ctx), observations);
+	if (outcome === "abort") return false;
+	const nextEntries = ctx.sessionManager.getBranch() as Entry[];
+	return uncheckpointedObservationsBeforeIndex(nextEntries, firstKeptIndex).length === 0;
 }
 
 async function runCompactionObserverFlush(

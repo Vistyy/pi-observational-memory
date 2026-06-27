@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import { STRATEGY } from "../config.js";
-import { ensureObservedBeforeCompaction } from "../memory-update/compaction.js";
+import { ensureCheckpointedBeforeCompaction, ensureObservedBeforeCompaction } from "../memory-update/compaction.js";
 import type { Runtime } from "../runtime.js";
 import { buildCompactionMemory, renderCheckpointSummary, type Entry } from "../session-ledger/index.js";
 
@@ -27,6 +27,11 @@ export function registerCompactionHook(pi: ExtensionAPI, runtime: Runtime): void
 			const { preparation } = event;
 			const { firstKeptEntryId, tokensBefore } = preparation;
 			const compactionHandoffObservations = await ensureObservedBeforeCompaction(pi, runtime, ctx, { firstKeptEntryId });
+			const checkpointReady = await ensureCheckpointedBeforeCompaction(pi, runtime, ctx, { firstKeptEntryId });
+			if (!checkpointReady) {
+				if (ctx.hasUI) ctx.ui.notify("Observational memory: checkpoint is not ready for compaction", "warning");
+				return { cancel: true };
+			}
 			if (runtime.config.strategy !== STRATEGY.replacement) return;
 			const branchEntries = ctx.sessionManager.getBranch() as Entry[];
 			const memory = buildCompactionMemory(

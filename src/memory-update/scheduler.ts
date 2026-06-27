@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { STRATEGY } from "../config.js";
-import { debugSessionMetadata, withDebugLogContext } from "../debug-log.js";
+import { debugLog, debugSessionMetadata, withDebugLogContext } from "../debug-log.js";
 import type { Runtime } from "../runtime.js";
 import type { Entry } from "../session-ledger/index.js";
 import { computeMemoryStageWork, type MemoryUpdateTrigger } from "./due.js";
@@ -19,7 +19,10 @@ export function registerMemoryUpdateHook(pi: ExtensionAPI, runtime: Runtime): vo
 function maybeLaunchMemoryUpdate(pi: ExtensionAPI, runtime: Runtime, ctx: MemoryUpdateCtx, trigger: MemoryUpdateTrigger): void {
 	runtime.ensureConfig(ctx.cwd);
 	if (runtime.config.strategy === STRATEGY.off) return;
-	if (runtime.memoryUpdateInFlight) return;
+	if (runtime.memoryUpdateInFlight) {
+		runtime.memoryUpdateRerunRequested = true;
+		return;
+	}
 
 	const entries = ctx.sessionManager.getBranch() as Entry[];
 	const work = computeMemoryStageWork(entries, runtime, trigger);
@@ -33,6 +36,19 @@ function maybeLaunchMemoryUpdate(pi: ExtensionAPI, runtime: Runtime, ctx: Memory
 		...sessionMetadata,
 		runId,
 	}, async () => {
-		await runMemoryUpdate(pi, runtime, ctx, trigger);
+		let nextTrigger = trigger;
+		while (true) {
+			runtime.memoryUpdateRerunRequested = false;
+			await runMemoryUpdate(pi, runtime, ctx, nextTrigger);
+			if (!runtime.memoryUpdateRerunRequested) return;
+			const nextEntries = ctx.sessionManager.getBranch() as Entry[];
+			const nextWork = computeMemoryStageWork(nextEntries, runtime, "turn_end");
+			if (nextWork.observerWork.length === 0 && nextWork.checkpointWork.length === 0) return;
+			debugLog("memory_update.rerun", {
+				observerRecordsPending: nextWork.observerWork.length,
+				checkpointObservationsPending: nextWork.checkpointWork.length,
+			});
+			nextTrigger = "turn_end";
+		}
 	}));
 }

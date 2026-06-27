@@ -19,6 +19,7 @@ export class Runtime {
 	config: Config = { ...DEFAULTS };
 	configLoaded = false;
 	memoryUpdateInFlight = false;
+	memoryUpdateRerunRequested = false;
 	inFlightObserverStagePromise: Promise<void> | null = null;
 	memoryUpdatePhase: MemoryUpdatePhase | undefined;
 	compactHookInFlight = false;

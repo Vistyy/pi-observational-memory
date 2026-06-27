@@ -9,7 +9,7 @@ const mockAgents = vi.hoisted(() => ({
 vi.mock("../src/agents/observer/agent.js", () => ({ runObserver: mockAgents.runObserver }));
 vi.mock("../src/agents/checkpoint-editor/agent.js", () => ({ runCheckpointEditor: mockAgents.runCheckpointEditor }));
 
-import { ensureObservedBeforeCompaction } from "../src/memory-update/compaction.js";
+import { ensureCheckpointedBeforeCompaction, ensureObservedBeforeCompaction } from "../src/memory-update/compaction.js";
 import { registerMemoryUpdateHook } from "../src/memory-update/scheduler.js";
 import { EMPTY_CHECKPOINT_MARKDOWN } from "../src/memory/checkpoint.js";
 import type { Runtime } from "../src/runtime.js";
@@ -70,6 +70,7 @@ function setup(args: {
 			observerThinking: "minimal",
 		},
 		memoryUpdateInFlight: args.memoryUpdateInFlight ?? false,
+		memoryUpdateRerunRequested: false,
 		inFlightObserverStagePromise: args.inFlightObserverStagePromise ?? null,
 		memoryUpdatePhase: undefined as "observer" | "checkpoint-editor" | undefined,
 		resolveFailureNotified: false,
@@ -101,6 +102,7 @@ function setup(args: {
 		sessionManager: { getBranch: () => entries },
 	} as unknown as ExtensionContext;
 	return {
+		pi,
 		runtime,
 		ctx,
 		fireAgentStart: () => handlers.agent_start!({ type: "agent_start" } as never, ctx),
@@ -140,6 +142,7 @@ describe("memory update hook", () => {
 		const locked = setup({ entries: [rawMessage("raw-1", "aaaaaaaa")], memoryUpdateInFlight: true });
 		locked.fireTurnEnd();
 		expect(locked.runtime.launchMemoryUpdateTask).not.toHaveBeenCalled();
+		expect(locked.runtime.memoryUpdateRerunRequested).toBe(true);
 	});
 
 	it("runs observer and then checkpoint update in the same memory update", async () => {
@@ -290,7 +293,7 @@ describe("memory update hook", () => {
 });
 
 describe("compaction observe catch-up", () => {
-	it("force-observes unobserved source entries before the compaction kept tail", async () => {
+	it("force-observes unobserved records before the compaction kept tail", async () => {
 		const obs = observation("bbbbbbbbbbbb", { sourceEntryIds: ["raw-1"] });
 		mockAgents.runObserver.mockResolvedValueOnce([obs]);
 		const entries = [rawMessage("raw-1", "aaaa"), rawMessage("raw-2", "bbbb")];
@@ -299,5 +302,19 @@ describe("compaction observe catch-up", () => {
 		await expect(ensureObservedBeforeCompaction({ appendEntry: vi.fn() } as never, setupResult.runtime as Runtime, setupResult.ctx as never, { firstKeptEntryId: "raw-2" })).resolves.toEqual([obs]);
 
 		expect(mockAgents.runObserver).toHaveBeenCalledOnce();
+	});
+
+	it("force-checkpoints uncheckpointed observations before the compaction kept tail", async () => {
+		const obs = observation("bbbbbbbbbbbb", { sourceEntryIds: ["raw-1"] });
+		const setupResult = setup({ entries: [
+			rawMessage("raw-1", "aaaa"),
+			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
+			rawMessage("raw-2", "bbbb"),
+		], observeEveryMessages: 999 });
+
+		await expect(ensureCheckpointedBeforeCompaction(setupResult.pi, setupResult.runtime as Runtime, setupResult.ctx as never, { firstKeptEntryId: "raw-2" })).resolves.toBe(true);
+
+		expect(mockAgents.runCheckpointEditor).toHaveBeenCalledWith(expect.objectContaining({ observationsText: expect.stringContaining(obs.id), purpose: "update" }));
+		expect(setupResult.getMemoryAppends()).toEqual([expect.objectContaining({ customType: OM_CHECKPOINT_RECORDED })]);
 	});
 });
