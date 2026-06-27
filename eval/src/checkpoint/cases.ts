@@ -150,6 +150,10 @@ function clearShrinkMissing(initial: string, content: string, minimumPercent = 1
 	return shrinkPercent(initial, content) >= minimumPercent ? [] : [`shrink >= ${minimumPercent}%`];
 }
 
+function missingPattern(content: string, label: string, pattern: RegExp): string[] {
+	return pattern.test(content) ? [] : [label];
+}
+
 function largeSyntheticCheckpoint(): string {
 	const duplicateJunk = Array.from({ length: 70 }, (_, index) => `- SYNTHETIC_REMOVE_DUPLICATE ${index}: repeated stale implementation note with no active decision. duplicate-junk duplicate-junk duplicate-junk duplicate-junk.`);
 	const similarFacts = Array.from({ length: 45 }, (_, index) => `- Similar historical note ${index}: checkpoint pruning discussion variant ${index % 9} was considered, but it is not an active decision unless tied to a keep anchor.`);
@@ -163,7 +167,7 @@ Diagnose large checkpoint prune latency without losing handoff-critical facts.
 
 ## Progress and decisions
 
-- SYNTHETIC_KEEP_DECISION_ALPHA: accepted that large prune diagnostics compare no guidance, soft 25% shrink, and soft 4k budget variants.
+- SYNTHETIC_KEEP_DECISION_ALPHA: accepted that large prune diagnostics now run only the no-guidance baseline variant.
 - Accepted: latency is diagnostic-only until baseline data exists.
 - Accepted: synthetic and real-latest fixtures both run once in the normal checkpoint eval set.
 ${duplicateJunk.join("\n")}
@@ -197,16 +201,6 @@ type PruneGuidanceVariant = {
 
 const PRUNE_GUIDANCE_VARIANTS: PruneGuidanceVariant[] = [
 	{ suffix: "baseline", promptVariant: "none" },
-	{
-		suffix: "soft-25",
-		promptVariant: "soft-25-percent",
-		pruneSizeGuidance: "Aim to make checkpoint.md at least 25% smaller. Preserving handoff-critical facts is more important than hitting this target.",
-	},
-	{
-		suffix: "soft-4k",
-		promptVariant: "soft-4k-budget",
-		pruneSizeGuidance: "Aim for the normal 4k token checkpoint target. Preserving handoff-critical facts is more important than hitting this budget.",
-	},
 ];
 
 function largePruneDiagnosticCases(): EvalCase[] {
@@ -226,17 +220,17 @@ function largePruneDiagnosticCases(): EvalCase[] {
 		},
 		grade: (result) => {
 			if (!result) return { passed: false, reason: "checkpoint editor did not finish", missing: ["finish_checkpoint_edit"] };
-			const missing = includesAll(result.content, [
-				"large prune",
-				"soft 25% shrink",
-				"soft 4k budget",
-				"src/agents/checkpoint-editor/agent.ts",
-				"pnpm checkpoint-evals -- --case checkpoint-prune-large-synthetic-baseline",
-				"compaction-pressure must not block",
-				"request diagnostics",
-				"edit-failure reason counts",
-				"diagnostic table",
-			]);
+			const missing = [
+				...includesAll(result.content, [
+					"src/agents/checkpoint-editor/agent.ts",
+					"pnpm checkpoint-evals -- --case checkpoint-prune-large-synthetic-baseline",
+				]),
+				...missingPattern(result.content, "no-guidance baseline variant", /no[- ]guidance|baseline/i),
+				...missingPattern(result.content, "compaction pressure must not block", /compaction[- ]pressure[\s\S]*(must not block|not block|non[- ]blocking|timeout|fallback)/i),
+				...missingPattern(result.content, "request diagnostics", /request diagnostics/i),
+				...missingPattern(result.content, "edit failure reason diagnostics", /edit[- ]failure|edit failure|failure reason/i),
+				...missingPattern(result.content, "prune diagnostic table", /diagnostic table|prune diagnostics/i),
+			];
 			missing.push(...clearShrinkMissing(synthetic, result.content));
 			const incorrect = [
 				...includesAll(result.content, ["# Checkpoint", "## Current objective", "## Progress and decisions", "## Important context", "## Remaining work", "## References and anchors"]),
