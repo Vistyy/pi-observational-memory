@@ -157,6 +157,8 @@ This produces six initial diagnostic cases.
 
 Run each case once at first.
 
+Use the same model and thinking configuration as normal CheckpointEditor runs.
+
 Repeat later only if the first results look noisy.
 
 The guided variants must stay eval variants until they prove they improve shrink quality without losing important facts.
