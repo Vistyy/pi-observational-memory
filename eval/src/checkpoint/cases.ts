@@ -227,11 +227,15 @@ function largePruneDiagnosticCases(): EvalCase[] {
 		grade: (result) => {
 			if (!result) return { passed: false, reason: "checkpoint editor did not finish", missing: ["finish_checkpoint_edit"] };
 			const missing = includesAll(result.content, [
-				"SYNTHETIC_KEEP_DECISION_ALPHA",
-				"SYNTHETIC_KEEP_PATH",
-				"SYNTHETIC_KEEP_COMMAND",
-				"SYNTHETIC_KEEP_BLOCKER",
-				"SYNTHETIC_KEEP_NEXT_STEP",
+				"large prune",
+				"soft 25% shrink",
+				"soft 4k budget",
+				"src/agents/checkpoint-editor/agent.ts",
+				"pnpm checkpoint-evals -- --case checkpoint-prune-large-synthetic-baseline",
+				"compaction-pressure must not block",
+				"request diagnostics",
+				"edit-failure reason counts",
+				"diagnostic table",
 			]);
 			missing.push(...clearShrinkMissing(synthetic, result.content));
 			const incorrect = [
