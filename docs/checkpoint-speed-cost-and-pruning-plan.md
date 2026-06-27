@@ -258,6 +258,62 @@ Do not let health prune block interactive work.
 
 Do not trade away checkpoint quality for small savings.
 
+## Codex compaction lessons
+
+OpenAI Codex treats compaction as a durable history replacement, not as an edit to old history.
+
+The important lesson is the shape:
+
+```text
+compaction = replacement snapshot + later tail replay
+```
+
+Codex creates a compacted history snapshot, installs it as live history, persists it, and later resume or fork rebuilds from the newest surviving snapshot plus later items.
+
+Relevant Codex files at the time of analysis:
+
+- `codex-rs/core/src/compact.rs`
+- `codex-rs/core/src/compact_remote.rs`
+- `codex-rs/core/src/compact_remote_v2.rs`
+- `codex-rs/core/src/compact_token_budget.rs`
+- `codex-rs/core/src/session/turn.rs`
+- `codex-rs/core/src/session/mod.rs`
+- `codex-rs/core/src/session/rollout_reconstruction.rs`
+- `codex-rs/core/src/state/auto_compact_window.rs`
+- `codex-rs/prompts/templates/compact/prompt.md`
+- `codex-rs/prompts/templates/compact/summary_prefix.md`
+- `codex-rs/protocol/src/protocol.rs`
+
+Codex local compaction asks the model for a handoff summary, prefixes it, keeps a bounded set of recent user messages, and stores the summary as a user message in replacement history.
+
+Codex remote compaction gets compacted history from the model or compact endpoint, filters unsafe or stale message kinds, then installs the filtered replacement history.
+
+Codex persists a `CompactedItem` with `replacement_history`, `window_number`, `first_window_id`, `previous_window_id`, and `window_id`.
+
+Codex resume and fork reconstruction scans the rollout newest to oldest, finds the newest surviving `replacement_history`, and replays only the later tail.
+
+That is the fork-safety part worth copying conceptually.
+
+For this project, compaction should not depend on slow CheckpointEditor pruning.
+
+Checkpoint pruning should improve the future checkpoint, not gate compaction unless there is no safe alternative.
+
+The likely long-term shape is:
+
+1. use the current checkpoint as the compaction handoff snapshot
+2. persist a durable compact snapshot for the current branch or session window
+3. rebuild fork or resume context from newest compact snapshot plus later ledger tail
+4. run checkpoint pruning separately in the background
+5. use the smaller checkpoint later if pruning finishes safely
+
+Do not copy Codex blindly.
+
+Codex inline compaction can still block the turn.
+
+Codex remote compaction depends on platform-specific response item types and endpoint behavior.
+
+The useful idea is the durable replacement snapshot and tail replay model.
+
 ## Recommended implementation order
 
 1. Add red-capable synthetic and real-latest large-checkpoint editor-prune diagnostic evals.
