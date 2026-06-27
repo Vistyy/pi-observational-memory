@@ -1,7 +1,8 @@
 import { EMPTY_CHECKPOINT_MARKDOWN } from "../../../src/memory/checkpoint.js";
-import { gradeContent } from "./grading.js";
-import { loadCheckpointUpdateFixture } from "./session-fixture.js";
-import type { EvalCase } from "./types.js";
+import { OM_CHECKPOINT_RECORDED, OM_OBSERVATIONS_RECORDED } from "../../../src/session-ledger/index.js";
+import { gradeContent, includesAll } from "./grading.js";
+import { DEFAULT_REAL_SESSION_PATH, loadCheckpointUpdateFixture } from "./session-fixture.js";
+import type { EvalCase, SessionReplayResult } from "./types.js";
 
 const baseWithObjective = EMPTY_CHECKPOINT_MARKDOWN.replace("None known.", "Continue OM checkpoint migration.");
 
@@ -27,10 +28,49 @@ function realSessionWideContextCase(): EvalCase {
 				"model",
 				"019efee5-f8da-7fe4-a4a8-91009462be14",
 				"/home/syzom/.pi/agent/sessions/--home-syzom-.pi-agent--/2026-06-25T13-09-04-858Z_019efee5-f8da-7fe4-a4a8-91009462be14.jsonl",
-				"session records",
+				"session",
 				"repeat",
 			],
 		}),
+	};
+}
+
+function gradeSessionReplay(result: SessionReplayResult | undefined) {
+	if (!result?.content) return { passed: false, reason: "session replay did not produce a checkpoint", missing: ["checkpoint"] };
+	const missing = includesAll(result.content, [
+		"ObserverRecordPlanner",
+		"finish_checkpoint_edit",
+		"/om:view",
+		"019efee5-f8da-7fe4-a4a8-91009462be14",
+		"session",
+		"repeat",
+	]);
+	const appendedTypes = new Set(result.appendedEntries.map((entry) => entry.customType));
+	if (!appendedTypes.has(OM_OBSERVATIONS_RECORDED)) missing.push(OM_OBSERVATIONS_RECORDED);
+	if (!appendedTypes.has(OM_CHECKPOINT_RECORDED)) missing.push(OM_CHECKPOINT_RECORDED);
+	if (result.finalEntryCount <= result.initialEntryCount) missing.push("appended entries");
+	if (result.uncheckpointedObservationCount !== 0) missing.push("checkpoint coverage for all replayed observations");
+	return {
+		passed: missing.length === 0,
+		reason: missing.length === 0 ? "session replay checks passed" : "session replay checks failed",
+		missing,
+	};
+}
+
+function realSessionReplayCase(): EvalCase {
+	return {
+		kind: "session-replay",
+		id: "checkpoint-e2e-replays-session-slice",
+		sessionPath: DEFAULT_REAL_SESSION_PATH,
+		throughEntryId: "74df84d1",
+		maxTurns: 8,
+		metadata: {
+			sessionPath: DEFAULT_REAL_SESSION_PATH,
+			checkpointEntryId: "7fbd419c",
+			omittedObservationsEntryId: "c050a7e8",
+			throughEntryId: "74df84d1",
+		},
+		grade: gradeSessionReplay,
 	};
 }
 
@@ -122,5 +162,6 @@ Keep checkpoint concise.
 			}),
 		},
 		realSessionWideContextCase(),
+		realSessionReplayCase(),
 	];
 }

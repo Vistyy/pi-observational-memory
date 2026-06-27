@@ -4,7 +4,7 @@ import type { Checkpoint, Entry, Observation } from "../../../src/session-ledger
 
 export const DEFAULT_REAL_SESSION_PATH = "/home/syzom/.pi/agent/sessions/--home-syzom-.pi-agent--/2026-06-25T13-09-04-858Z_019efee5-f8da-7fe4-a4a8-91009462be14.jsonl";
 
-function readJsonl(path: string): Entry[] {
+export function loadSessionEntries(path: string): Entry[] {
 	return readFileSync(path, "utf-8")
 		.split(/\r?\n/)
 		.filter(Boolean)
@@ -23,7 +23,7 @@ function observationsEntryContent(entry: Entry): Observation[] | undefined {
 }
 
 export function loadCheckpointFromSession(path: string, entryId: string): Checkpoint {
-	const entry = readJsonl(path).find((candidate) => candidate.id === entryId);
+	const entry = loadSessionEntries(path).find((candidate) => candidate.id === entryId);
 	if (!entry) throw new Error(`session fixture checkpoint entry not found: ${entryId}`);
 	const checkpoint = checkpointEntryContent(entry);
 	if (!checkpoint) throw new Error(`session fixture entry is not a checkpoint: ${entryId}`);
@@ -31,7 +31,7 @@ export function loadCheckpointFromSession(path: string, entryId: string): Checkp
 }
 
 export function loadObservationsFromSession(path: string, entryId: string): Observation[] {
-	const entry = readJsonl(path).find((candidate) => candidate.id === entryId);
+	const entry = loadSessionEntries(path).find((candidate) => candidate.id === entryId);
 	if (!entry) throw new Error(`session fixture observations entry not found: ${entryId}`);
 	const observations = observationsEntryContent(entry);
 	if (!observations) throw new Error(`session fixture entry is not observations: ${entryId}`);

@@ -5,7 +5,8 @@ import type { Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
 import { runCheckpointEditor } from "../../../src/agents/checkpoint-editor/agent.js";
 import type { MemoryAgentUsage } from "../../../src/agents/common.js";
-import type { EvalCase, EvalRecord, EvalSummary } from "./types.js";
+import { runSessionReplayCase } from "./session-replay.js";
+import type { EditorEvalCase, EvalCase, EvalRecord, EvalSummary, SessionReplayEvalCase } from "./types.js";
 
 export type ResolvedEvalModel = { model: Model<any>; apiKey: string; headers?: Record<string, string> };
 
@@ -27,7 +28,7 @@ export async function resolveModel(spec: string): Promise<ResolvedEvalModel> {
 	return { model, apiKey: auth.apiKey as string, headers: auth.headers as Record<string, string> | undefined };
 }
 
-export async function runCase(testCase: EvalCase, resolved: ResolvedEvalModel, thinking: ModelThinkingLevel, iteration: number): Promise<EvalRecord> {
+async function runEditorCase(testCase: EditorEvalCase, resolved: ResolvedEvalModel, thinking: ModelThinkingLevel, iteration: number): Promise<EvalRecord> {
 	const started = Date.now();
 	const usage: MemoryAgentUsage[] = [];
 	const dir = await mkdtemp(join(tmpdir(), "om-checkpoint-eval-"));
@@ -46,6 +47,7 @@ export async function runCase(testCase: EvalCase, resolved: ResolvedEvalModel, t
 		});
 		const grade = testCase.grade(result);
 		return {
+			kind: "editor",
 			id: testCase.id,
 			iteration,
 			passed: grade.passed,
@@ -59,21 +61,60 @@ export async function runCase(testCase: EvalCase, resolved: ResolvedEvalModel, t
 			metadata: testCase.metadata,
 		};
 	} catch (error) {
-		return {
-			id: testCase.id,
-			iteration,
-			passed: false,
-			reason: "runtime error",
-			missing: [],
-			incorrect: [],
-			usage,
-			durationMs: Date.now() - started,
-			error: error instanceof Error ? error.message : String(error),
-			metadata: testCase.metadata,
-		};
+		return runtimeErrorRecord(testCase.id, "editor", iteration, started, usage, error, testCase.metadata);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}
+}
+
+async function runReplayCase(testCase: SessionReplayEvalCase, resolved: ResolvedEvalModel, iteration: number): Promise<EvalRecord> {
+	const started = Date.now();
+	try {
+		const result = await runSessionReplayCase(testCase, resolved);
+		const grade = testCase.grade(result);
+		return {
+			kind: "session-replay",
+			id: testCase.id,
+			iteration,
+			passed: grade.passed,
+			reason: grade.reason,
+			missing: grade.missing ?? [],
+			incorrect: grade.incorrect ?? [],
+			content: result.content,
+			usage: [],
+			durationMs: Date.now() - started,
+			metadata: testCase.metadata,
+			initialEntryCount: result.initialEntryCount,
+			finalEntryCount: result.finalEntryCount,
+			appendedEntryTypes: result.appendedEntries.map((entry) => entry.customType ?? entry.type),
+			observationCount: result.observations.length,
+			checkpointCount: result.checkpointCount,
+			uncheckpointedObservationCount: result.uncheckpointedObservationCount,
+		};
+	} catch (error) {
+		return runtimeErrorRecord(testCase.id, "session-replay", iteration, started, [], error, testCase.metadata);
+	}
+}
+
+function runtimeErrorRecord(id: string, kind: "editor" | "session-replay", iteration: number, started: number, usage: MemoryAgentUsage[], error: unknown, metadata: Record<string, unknown> | undefined): EvalRecord {
+	return {
+		kind,
+		id,
+		iteration,
+		passed: false,
+		reason: "runtime error",
+		missing: [],
+		incorrect: [],
+		usage,
+		durationMs: Date.now() - started,
+		error: error instanceof Error ? error.message : String(error),
+		metadata,
+	};
+}
+
+export async function runCase(testCase: EvalCase, resolved: ResolvedEvalModel, thinking: ModelThinkingLevel, iteration: number): Promise<EvalRecord> {
+	if (testCase.kind === "session-replay") return runReplayCase(testCase, resolved, iteration);
+	return runEditorCase(testCase, resolved, thinking, iteration);
 }
 
 export async function runCases(args: {

@@ -1,5 +1,6 @@
 import type { MemoryAgentUsage } from "../../../src/agents/common.js";
 import type { CheckpointEditorResult } from "../../../src/agents/checkpoint-editor/agent.js";
+import type { Checkpoint, Entry, Observation } from "../../../src/session-ledger/index.js";
 
 export type CheckpointEvalPurpose = "update" | "prune";
 
@@ -10,7 +11,8 @@ export type Grade = {
 	incorrect?: string[];
 };
 
-export type EvalCase = {
+export type EditorEvalCase = {
+	kind?: "editor";
 	id: string;
 	purpose: CheckpointEvalPurpose;
 	initialContent: string;
@@ -20,7 +22,31 @@ export type EvalCase = {
 	grade: (result: CheckpointEditorResult | undefined) => Grade;
 };
 
+export type SessionReplayResult = {
+	initialEntryCount: number;
+	finalEntryCount: number;
+	appendedEntries: Entry[];
+	observations: Observation[];
+	checkpoint?: Checkpoint;
+	content?: string;
+	checkpointCount: number;
+	uncheckpointedObservationCount: number;
+};
+
+export type SessionReplayEvalCase = {
+	kind: "session-replay";
+	id: string;
+	sessionPath: string;
+	throughEntryId: string;
+	maxTurns?: number;
+	metadata?: Record<string, unknown>;
+	grade: (result: SessionReplayResult | undefined) => Grade;
+};
+
+export type EvalCase = EditorEvalCase | SessionReplayEvalCase;
+
 export type EvalRecord = {
+	kind: EvalCase["kind"] | "editor";
 	id: string;
 	iteration: number;
 	passed: boolean;
@@ -33,6 +59,12 @@ export type EvalRecord = {
 	durationMs: number;
 	error?: string;
 	metadata?: Record<string, unknown>;
+	initialEntryCount?: number;
+	finalEntryCount?: number;
+	appendedEntryTypes?: string[];
+	observationCount?: number;
+	checkpointCount?: number;
+	uncheckpointedObservationCount?: number;
 };
 
 export type EvalSummary = {
