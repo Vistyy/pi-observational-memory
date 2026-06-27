@@ -32,6 +32,7 @@ export type MemoryAgentLoopArgs = {
 	requireToolCall?: boolean;
 	maxNoToolRetries?: number;
 	toolCallReminder?: string;
+	getAdditionalFollowUpMessages?: () => Promise<Message[]> | Message[];
 	maxProviderErrorRetries?: number;
 };
 
@@ -136,14 +137,16 @@ export async function runMemoryAgentLoop(args: MemoryAgentLoopArgs): Promise<voi
 			...(reasoning && thinkingLevel !== "off" ? { reasoning: thinkingLevel } : {}),
 			shouldStopAfterTurn,
 			getFollowUpMessages: async () => {
-				if (!requireToolCall || noToolTurnCount <= noToolReminderCount || noToolReminderCount >= maxNoToolRetries) return [];
-				noToolReminderCount++;
-				debugLog("memory_agent.required_tool_reminder", {
-					agent: args.agentName,
-					turnCount,
-					noToolTurnCount,
-				});
-				return [{ role: "user", content: [{ type: "text", text: toolCallReminder }], timestamp: Date.now() }];
+				if (requireToolCall && noToolTurnCount > noToolReminderCount && noToolReminderCount < maxNoToolRetries) {
+					noToolReminderCount++;
+					debugLog("memory_agent.required_tool_reminder", {
+						agent: args.agentName,
+						turnCount,
+						noToolTurnCount,
+					});
+					return [{ role: "user", content: [{ type: "text", text: toolCallReminder }], timestamp: Date.now() }];
+				}
+				return args.getAdditionalFollowUpMessages?.() ?? [];
 			},
 		};
 

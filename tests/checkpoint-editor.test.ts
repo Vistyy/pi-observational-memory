@@ -61,4 +61,27 @@ describe("runCheckpointEditor", () => {
 			agentLoop: loop,
 		})).resolves.toBeUndefined();
 	});
+
+	it("reminds the editor to finish after successful non-finishing tool turns", async () => {
+		const path = await draftPath();
+		const loop = fakeAgentLoop(async (_prompts, context, config) => {
+			const read = context.tools.find((tool) => tool.name === "read")!;
+			const finish = context.tools.find((tool) => tool.name === "finish_checkpoint_edit")!;
+			await read.execute("read-1", { path: "checkpoint.md" });
+			expect(config.shouldStopAfterTurn?.({ toolResults: [{ isError: false }] })).toBe(false);
+			const followUps = await config.getFollowUpMessages?.();
+			expect(followUps?.[0]?.content[0]?.text).toContain("call finish_checkpoint_edit now");
+			await finish.execute("finish-1", { reason: "already valid" });
+		});
+
+		await expect(runCheckpointEditor({
+			model: {},
+			apiKey: "test",
+			draftPath: path,
+			initialContent: EMPTY_CHECKPOINT_MARKDOWN,
+			observationsText: "None.",
+			purpose: "prune",
+			agentLoop: loop,
+		})).resolves.toEqual({ content: EMPTY_CHECKPOINT_MARKDOWN, reason: "already valid", changed: false });
+	});
 });
