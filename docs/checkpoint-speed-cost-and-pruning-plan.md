@@ -24,6 +24,10 @@ The main agent should retrieve or verify evidence instead of guessing about proj
 
 ## Prompt and instruction changes
 
+Rewrite the memory prompts as a coherent set instead of patching one prompt at a time.
+
+Use the same language across Observer, CheckpointEditor update, CheckpointEditor prune, and compaction handoff rendering.
+
 Use a sharper gate than `Will the next agent act better because this is preserved?`.
 
 Recommended leading word:
@@ -40,7 +44,11 @@ A fact is handoff-critical when it would change a future agent's next action, pr
 
 Observer prompt should record only source-backed, handoff-critical evidence.
 
-CheckpointEditor prompt should keep every checkpoint detail that is handoff-critical and remove details that do not pass the gate.
+CheckpointEditor update prompt should merge observations as a patch into the current handoff.
+
+CheckpointEditor prune prompt should create a smaller Codex-style handoff checkpoint for another LLM that will resume the session.
+
+Compaction handoff rendering should wrap the checkpoint with that same resume-oriented framing.
 
 The main agent prompt should include an anti-guessing contract:
 
@@ -243,10 +251,12 @@ Forced catch-up before compaction remains unchanged.
 
 Candidate later variants:
 
-1. compact successful edit tool-call arguments before the next model request
-2. add a native-feeling terminal `edit_and_finish` tool if measurement shows the finish request is still pure waste
-3. add a deterministic emergency prune fallback for interactive pressure paths
-4. move health prune out of fork-spawn critical paths
+1. use a dedicated prune tool flow: `read -> write -> finish_checkpoint_edit`
+2. keep update on the edit tool flow: `read -> edit -> finish_checkpoint_edit`
+3. compact successful edit tool-call arguments before the next model request for update only if measurement shows it helps
+4. add a native-feeling terminal `write_and_finish` tool if measurement shows the finish request is still pure waste
+5. add a deterministic emergency prune fallback for interactive pressure paths
+6. move health prune out of fork-spawn critical paths
 
 Compare each variant against baseline on the same eval cases.
 
@@ -363,6 +373,8 @@ The useful idea is the durable replacement snapshot and tail replay model.
 4. Verify current baseline metrics for update, prune, and session replay.
 5. Add prompt gate updates if they are not already present.
 6. Add or verify checkpoint cadence thresholds.
-7. Make health prune run in the background instead of blocking interactive paths.
-8. Stop compaction-pressure from blocking indefinitely on hard-max CheckpointEditor prune.
-9. Only then test edit-history redaction, deterministic fallback, or terminal edit variants.
+7. Rewrite the Observer, CheckpointEditor update, CheckpointEditor prune, and compaction handoff prompts as one coherent prompt set.
+8. Change prune from exact edit mechanics to write mechanics.
+9. Make health prune run in the background instead of blocking interactive paths.
+10. Stop compaction-pressure from blocking indefinitely on hard-max CheckpointEditor prune.
+11. Only then test edit-history redaction for update, deterministic fallback, or terminal write variants.
