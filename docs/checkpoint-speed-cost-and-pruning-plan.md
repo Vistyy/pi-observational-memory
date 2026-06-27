@@ -42,13 +42,19 @@ Observer prompt should record only source-backed, handoff-critical evidence.
 
 CheckpointEditor prompt should keep every checkpoint detail that is handoff-critical and remove details that do not pass the gate.
 
-The default agent prompt should include an anti-guessing contract:
+The main agent prompt should include an anti-guessing contract:
 
 ```text
 If an answer depends on prior session context, project state, file contents, tool output, or previous user decisions, and that evidence is not visible, retrieve or verify it before answering.
 If retrieval is unavailable or inconclusive, say what is unknown.
 Do not fill session-specific gaps from plausibility.
 ```
+
+Observational Memory can add this while the extension is loaded by appending to the Pi `before_agent_start` system prompt.
+
+That is extension-scoped.
+
+If the behavior should apply without Observational Memory, it belongs in Pi core or shared/global agent instructions.
 
 ## Current prune latency problem
 
@@ -306,12 +312,26 @@ Codex frames compaction as a handoff summary for another LLM that will resume th
 
 Our compaction message should get closer to that framing while using the current checkpoint as the source.
 
-The compaction handoff should say, in effect:
+Current rendering is already checkpoint-backed, but its wrapper is weaker than Codex-style handoff framing.
+
+Current wrapper:
 
 ```text
-This is a checkpoint handoff for the next LLM.
-Use it to resume without repeating work.
-It contains current progress, decisions, constraints, next steps, and critical references.
+These are condensed memories from earlier in this session.
+
+The checkpoint below is the current handoff core.
+It should be treated as current session memory unless the recent tail or user request supersedes it.
+```
+
+Change the wrapper to say, in effect:
+
+```text
+This is a checkpoint handoff for another LLM that will resume this session.
+
+Use it to continue without repeating work.
+It contains current progress, decisions, constraints, remaining work, and critical references.
+
+Treat it as current session memory unless the recent tail or user request supersedes it.
 ```
 
 Do not generate a second summary from scratch when a checkpoint already exists.
