@@ -155,6 +155,8 @@ The first diagnostic run should compare several prompt guidance variants on both
 
 This produces six initial diagnostic cases.
 
+Include these cases in the normal checkpoint eval set.
+
 Run each case once at first.
 
 Use the same model and thinking configuration as normal CheckpointEditor runs.
