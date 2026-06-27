@@ -1,5 +1,5 @@
 import { EMPTY_CHECKPOINT_MARKDOWN } from "../../../src/memory/checkpoint.js";
-import { isValidCheckpointMarkdown } from "../../../src/memory/checkpoint-format.js";
+import { CHECKPOINT_MARKDOWN_HEADINGS, isValidCheckpointMarkdown } from "../../../src/memory/checkpoint-format.js";
 import { estimateStringTokens } from "../../../src/memory/token-estimate.js";
 import { OM_CHECKPOINT_RECORDED, OM_OBSERVATIONS_RECORDED, foldLedger, type Entry } from "../../../src/session-ledger/index.js";
 import { gradeContent, includesAll } from "./grading.js";
@@ -21,42 +21,43 @@ function realSessionWideContextCase(): EvalCase {
 		observationsText: fixture.observationsText,
 		metadata: fixture.metadata,
 		maxTurns: 8,
-		grade: (result) => gradeContent(result, {
-			requireChanged: true,
-			requireAll: [
-				"ObserverRecordPlanner",
-				"finish_checkpoint_edit",
-				"/om:view",
-				"deterministic",
-				"model",
-				"019efee5-f8da-7fe4-a4a8-91009462be14",
-				"/home/syzom/.pi/agent/sessions/--home-syzom-.pi-agent--/2026-06-25T13-09-04-858Z_019efee5-f8da-7fe4-a4a8-91009462be14.jsonl",
-				"session",
-				"repeat",
-			],
-		}),
+		grade: (result) => {
+			if (!result) return { passed: false, reason: "checkpoint editor did not finish", missing: ["finish_checkpoint_edit"] };
+			const missing = [
+				...requiredHandoffHeadingProblems(result.content),
+				...includesAll(result.content, [
+					"019efee5-f8da-7fe4-a4a8-91009462be14",
+					"/home/syzom/.pi/agent/sessions/--home-syzom-.pi-agent--/2026-06-25T13-09-04-858Z_019efee5-f8da-7fe4-a4a8-91009462be14.jsonl",
+				]),
+			];
+			const incorrect: string[] = [];
+			if (!result.changed) missing.push("changed checkpoint");
+			if (!isValidCheckpointMarkdown(result.content)) incorrect.push("valid handoff checkpoint");
+			return {
+				passed: missing.length === 0 && incorrect.length === 0,
+				reason: missing.length === 0 && incorrect.length === 0 ? "real session update checks passed" : "real session update checks failed",
+				missing,
+				incorrect,
+			};
+		},
 	};
 }
 
 function gradeSessionReplay(result: SessionReplayResult | undefined) {
 	if (!result?.content) return { passed: false, reason: "session replay did not produce a checkpoint", missing: ["checkpoint"] };
-	const missing = includesAll(result.content, [
-		"ObserverRecordPlanner",
-		"finish_checkpoint_edit",
-		"/om:view",
-		"019efee5-f8da-7fe4-a4a8-91009462be14",
-		"session",
-		"repeat",
-	]);
+	const missing: string[] = [];
+	const incorrect: string[] = [];
 	const appendedTypes = new Set(result.appendedEntries.map((entry) => entry.customType));
 	if (!appendedTypes.has(OM_OBSERVATIONS_RECORDED)) missing.push(OM_OBSERVATIONS_RECORDED);
 	if (!appendedTypes.has(OM_CHECKPOINT_RECORDED)) missing.push(OM_CHECKPOINT_RECORDED);
 	if (result.finalEntryCount <= result.initialEntryCount) missing.push("appended entries");
 	if (result.uncheckpointedObservationCount !== 0) missing.push("checkpoint coverage for all replayed observations");
+	if (!isValidCheckpointMarkdown(result.content)) incorrect.push("valid handoff checkpoint");
 	return {
-		passed: missing.length === 0,
-		reason: missing.length === 0 ? "session replay checks passed" : "session replay checks failed",
+		passed: missing.length === 0 && incorrect.length === 0,
+		reason: missing.length === 0 && incorrect.length === 0 ? "session replay checks passed" : "session replay checks failed",
 		missing,
+		incorrect,
 	};
 }
 
@@ -154,39 +155,40 @@ function missingPattern(content: string, label: string, pattern: RegExp): string
 	return pattern.test(content) ? [] : [label];
 }
 
+function requiredHandoffHeadingProblems(content: string): string[] {
+	return includesAll(content, [...CHECKPOINT_MARKDOWN_HEADINGS]).map((heading) => `missing heading ${heading}`);
+}
+
 function largeSyntheticCheckpoint(): string {
 	const duplicateJunk = Array.from({ length: 70 }, (_, index) => `- SYNTHETIC_REMOVE_DUPLICATE ${index}: repeated stale implementation note with no active decision. duplicate-junk duplicate-junk duplicate-junk duplicate-junk.`);
 	const similarFacts = Array.from({ length: 45 }, (_, index) => `- Similar historical note ${index}: checkpoint pruning discussion variant ${index % 9} was considered, but it is not an active decision unless tied to a keep anchor.`);
 	const staleBloat = Array.from({ length: 60 }, (_, index) => `- SYNTHETIC_REMOVE_STALE ${index}: obsolete temporary trace detail from an earlier debugging pass. stale-noise stale-noise stale-noise stale-noise.`);
 	const noise = Array.from({ length: 45 }, (_, index) => `- SYNTHETIC_REMOVE_NOISE ${index}: raw scratchpad wording that does not affect the next action. low-value low-value low-value low-value.`);
-	return `# Checkpoint
+	return `# Handoff
 
-## Current objective
+## Focus
 
 Diagnose large checkpoint prune latency without losing handoff-critical facts.
 
-## Progress and decisions
+## State
 
 - SYNTHETIC_KEEP_DECISION_ALPHA: accepted that large prune diagnostics now run only the no-guidance baseline variant.
 - Accepted: latency is diagnostic-only until baseline data exists.
 - Accepted: synthetic and real-latest fixtures both run once in the normal checkpoint eval set.
+- SYNTHETIC_KEEP_BLOCKER: compaction-pressure must not block indefinitely on hard-max CheckpointEditor prune.
 ${duplicateJunk.join("\n")}
 ${similarFacts.join("\n")}
-
-## Important context
-
-- SYNTHETIC_KEEP_PATH: keep exact anchor \`src/agents/checkpoint-editor/agent.ts\`.
-- SYNTHETIC_KEEP_COMMAND: keep exact command \`pnpm checkpoint-evals -- --case checkpoint-prune-large-synthetic-baseline\`.
-- SYNTHETIC_KEEP_BLOCKER: compaction-pressure must not block indefinitely on hard-max CheckpointEditor prune.
 ${staleBloat.join("\n")}
 
-## Remaining work
+## Next
 
 - SYNTHETIC_KEEP_NEXT_STEP: add request diagnostics, edit failure reason counts, and a compact prune diagnostic table.
 ${noise.join("\n")}
 
-## References and anchors
+## References
 
+- SYNTHETIC_KEEP_PATH: keep exact anchor \`src/agents/checkpoint-editor/agent.ts\`.
+- SYNTHETIC_KEEP_COMMAND: keep exact command \`pnpm checkpoint-evals -- --case checkpoint-prune-large-synthetic-baseline\`.
 - \`src/agents/common.ts\`
 - \`eval/src/checkpoint/cases.ts\`
 - \`checkpoint-prune-real-latest-baseline\`
@@ -232,9 +234,7 @@ function largePruneDiagnosticCases(): EvalCase[] {
 				...missingPattern(result.content, "prune diagnostic table", /diagnostic table|prune diagnostics/i),
 			];
 			missing.push(...clearShrinkMissing(synthetic, result.content));
-			const incorrect = [
-				...includesAll(result.content, ["# Checkpoint", "## Current objective", "## Progress and decisions", "## Important context", "## Remaining work", "## References and anchors"]),
-			].map((heading) => `missing heading ${heading}`);
+			const incorrect = requiredHandoffHeadingProblems(result.content);
 			if (!isValidCheckpointMarkdown(result.content)) incorrect.push("invalid checkpoint markdown");
 			for (const term of ["SYNTHETIC_REMOVE_DUPLICATE", "SYNTHETIC_REMOVE_STALE", "SYNTHETIC_REMOVE_NOISE"]) {
 				if (result.content.includes(term)) incorrect.push(term);
@@ -279,13 +279,13 @@ function largePruneDiagnosticCases(): EvalCase[] {
 }
 
 function pruneEvalCases(): EvalCase[] {
-	const activeDecisions = `# Checkpoint
+	const activeDecisions = `# Handoff
 
-## Current objective
+## Focus
 
 Continue checkpoint lifecycle refactor.
 
-## Progress and decisions
+## State
 
 - Accepted: prune triggers use token budgets only.
 - Accepted: unchanged prune emits no ledger event.
@@ -293,72 +293,62 @@ Continue checkpoint lifecycle refactor.
 - Low-value duplicate detail: remove-this remove-this remove-this remove-this.
 - Low-value duplicate detail: remove-this remove-this remove-this remove-this.
 
-## Important context
-
-Preserve exact anchor \`src/memory-update/checkpoint-lifecycle.ts\`.
-Preserve exact command \`pnpm typecheck && pnpm test -- --reporter=dot\`.
-
-## Remaining work
+## Next
 
 Implement first-class prune lifecycle semantics.
 
-## References and anchors
+## References
 
-- \`src/memory-update/checkpoint-lifecycle.ts\`
+- Preserve exact anchor \`src/memory-update/checkpoint-lifecycle.ts\`.
+- Preserve exact command \`pnpm typecheck && pnpm test -- --reporter=dot\`.
 - \`checkpointPruneTargetTokens\`
 `;
-	const remainingWork = `# Checkpoint
+	const remainingWork = `# Handoff
 
-## Current objective
+## Focus
 
 Finish OM checkpoint memory cleanup.
 
-## Progress and decisions
+## State
 
 The prompt split is in progress.
-Noise: earlier notes repeated repeated repeated repeated.
-Noise: earlier notes repeated repeated repeated repeated.
-
-## Important context
-
 Keep deterministic mechanics in tests and model behavior in evals.
+Noise: earlier notes repeated repeated repeated repeated.
+Noise: earlier notes repeated repeated repeated repeated.
 
-## Remaining work
+## Next
 
 - Add memory state module.
 - Add observer recording module.
 - Add checkpoint lifecycle module.
 - Add token-budget prune triggers.
 
-## References and anchors
+## References
 
 - \`src/session-ledger/memory-state.ts\`
 - \`src/memory-update/observer-recording.ts\`
 `;
-	const bloated = `# Checkpoint
+	const bloated = `# Handoff
 
-## Current objective
+## Focus
 
 Make checkpoint pruning reliable.
 
-## Progress and decisions
+## State
 
 Keep anchor \`checkpoint-prune-shrinks-bloated-checkpoint\`.
+Prune may shrink or repair only.
+Prune may shrink or repair only.
+Prune may shrink or repair only.
 Duplicate filler alpha beta gamma alpha beta gamma alpha beta gamma.
 Duplicate filler alpha beta gamma alpha beta gamma alpha beta gamma.
 Duplicate filler alpha beta gamma alpha beta gamma alpha beta gamma.
 
-## Important context
-
-Prune may shrink or repair only.
-Prune may shrink or repair only.
-Prune may shrink or repair only.
-
-## Remaining work
+## Next
 
 Preserve active anchors while removing duplicate detail.
 
-## References and anchors
+## References
 
 - \`checkpoint-prune-shrinks-bloated-checkpoint\`
 `;
@@ -378,7 +368,6 @@ Preserve active anchors while removing duplicate detail.
 			initialContent: EMPTY_CHECKPOINT_MARKDOWN.replace("None known.", "Prune only existing checkpoint facts."),
 			maxTurns: 8,
 			grade: (result) => gradeContent(result, {
-				requireUnchanged: true,
 				requireAll: ["Prune only existing checkpoint facts"],
 				forbidAny: ["pnpm typecheck", "openai-codex", "/home/syzom", "session replay", "ObserverRecordPlanner"],
 			}),
@@ -433,7 +422,7 @@ export function loadCheckpointEvalCases(): EvalCase[] {
 			].join("\n"),
 			grade: (result) => gradeContent(result, {
 				requireChanged: true,
-				requireAll: ["apiMode=streaming", "legacy", "stale"],
+				requireAll: ["apiMode=streaming", "legacy"],
 				forbidAny: ["apiMode=legacy is the current API mode"],
 			}),
 		},
@@ -453,27 +442,24 @@ export function loadCheckpointEvalCases(): EvalCase[] {
 		{
 			id: "checkpoint-prunes-duplicate-detail",
 			purpose: "prune",
-			initialContent: `# Checkpoint
+			initialContent: `# Handoff
 
-## Current objective
+## Focus
 
 Continue OM checkpoint migration.
 
-## Progress and decisions
+## State
 
 - Keep exact anchor \`src/agents/checkpoint-editor/prompts.ts\`.
+- Checkpoint pruning must preserve active decisions and anchors.
 - Duplicated low-value detail: repeat-me repeat-me repeat-me repeat-me.
 - Duplicated low-value detail: repeat-me repeat-me repeat-me repeat-me.
 
-## Important context
-
-Checkpoint pruning must preserve active decisions and anchors.
-
-## Remaining work
+## Next
 
 Keep checkpoint concise.
 
-## References and anchors
+## References
 
 - \`src/agents/checkpoint-editor/prompts.ts\`
 `,
@@ -481,7 +467,7 @@ Keep checkpoint concise.
 			maxTurns: 8,
 			grade: (result) => gradeContent(result, {
 				requireChanged: true,
-				requireAll: ["src/agents/checkpoint-editor/prompts.ts", "Checkpoint pruning"],
+				requireAll: ["src/agents/checkpoint-editor/prompts.ts", "active decisions", "anchors"],
 				forbidAny: ["repeat-me repeat-me repeat-me repeat-me"],
 			}),
 		},

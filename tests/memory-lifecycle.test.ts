@@ -76,8 +76,8 @@ function setup(args: {
 			debugLog: false,
 			observeEveryMessages: args.observeEveryMessages ?? 1,
 			observeHardCapRecords: args.observeHardCapRecords ?? 32,
-			checkpointUpdateEveryObservations: args.checkpointUpdateEveryObservations ?? 8,
-			checkpointUpdateEverySourceRecords: args.checkpointUpdateEverySourceRecords ?? 32,
+			checkpointUpdateEveryObservations: args.checkpointUpdateEveryObservations ?? 16,
+			checkpointUpdateEverySourceRecords: args.checkpointUpdateEverySourceRecords ?? 64,
 			maxInitialObserveTokens: args.maxInitialObserveTokens ?? 100_000,
 			observerToolResultSummaryMaxLines: 4,
 			observerToolResultErrorMaxLines: 20,
@@ -179,7 +179,7 @@ describe("MemoryLifecycle", () => {
 	});
 
 	it("runs checkpoint update after observer when observation threshold is reached", async () => {
-		const observations = Array.from({ length: 8 }, (_, i) => observation(`${i + 1}`.padStart(12, "0"), { sourceEntryIds: ["raw-1"] }));
+		const observations = Array.from({ length: 16 }, (_, i) => observation(`${i + 1}`.padStart(12, "0"), { sourceEntryIds: ["raw-1"] }));
 		mockAgents.runObserver.mockResolvedValueOnce(observations);
 		const setupResult = setup({ entries: [rawMessage("raw-1", "aaaaaaaa")] });
 
@@ -200,7 +200,7 @@ describe("MemoryLifecycle", () => {
 	});
 
 	it("runs checkpoint-only when observation threshold is reached", async () => {
-		const observations = Array.from({ length: 8 }, (_, i) => observation(`${i + 1}`.padStart(12, "0"), { sourceEntryIds: ["raw-1"] }));
+		const observations = Array.from({ length: 16 }, (_, i) => observation(`${i + 1}`.padStart(12, "0"), { sourceEntryIds: ["raw-1"] }));
 		const setupResult = setup({ entries: [rawMessage("raw-1", "aaaaaaaa"), observationsRecordedEntry("om-obs", { observations, coversUpToId: "raw-1" })], observeEveryMessages: 999 });
 
 		await setupResult.lifecycle.runNow("turn_end", setupResult.ctx as never);
@@ -210,12 +210,12 @@ describe("MemoryLifecycle", () => {
 	});
 
 	it("runs checkpoint-only when source span threshold is reached", async () => {
-		const entries = Array.from({ length: 32 }, (_, i) => rawMessage(`raw-${i + 1}`, "aaaaaaaa"));
+		const entries = Array.from({ length: 64 }, (_, i) => rawMessage(`raw-${i + 1}`, "aaaaaaaa"));
 		const observations = [
 			observation("aaaaaaaaaaaa", { sourceEntryIds: ["raw-1"] }),
-			observation("bbbbbbbbbbbb", { sourceEntryIds: ["raw-32"] }),
+			observation("bbbbbbbbbbbb", { sourceEntryIds: ["raw-64"] }),
 		];
-		const setupResult = setup({ entries: [...entries, observationsRecordedEntry("om-obs", { observations, coversUpToId: "raw-32" })], observeEveryMessages: 999 });
+		const setupResult = setup({ entries: [...entries, observationsRecordedEntry("om-obs", { observations, coversUpToId: "raw-64" })], observeEveryMessages: 999 });
 
 		await setupResult.lifecycle.runNow("turn_end", setupResult.ctx as never);
 
@@ -420,7 +420,7 @@ describe("MemoryLifecycle", () => {
 
 		const result = await setupResult.lifecycle.prepareForCompaction(setupResult.ctx as never, { firstKeptEntryId: "raw-2", tokensBefore: 123 });
 
-		expect(result).toEqual(expect.objectContaining({ kind: "ready", firstKeptEntryId: "raw-2", tokensBefore: 123, summary: expect.stringContaining("# Checkpoint"), details: expect.objectContaining({ type: "om.checkpoint" }) }));
+		expect(result).toEqual(expect.objectContaining({ kind: "ready", firstKeptEntryId: "raw-2", tokensBefore: 123, summary: expect.stringContaining("# Handoff"), details: expect.objectContaining({ type: "om.checkpoint" }) }));
 		expect(mockAgents.runObserver).toHaveBeenCalledOnce();
 		expect(mockAgents.runCheckpointEditor).toHaveBeenCalledWith(expect.objectContaining({ observationsText: expect.stringContaining(obs.content), purpose: "update" }));
 	});

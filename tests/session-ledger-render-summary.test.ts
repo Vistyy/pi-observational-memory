@@ -13,7 +13,7 @@ describe("session-ledger summary rendering", () => {
 
 		const summary = renderCheckpointSummary(check);
 
-		expect(summary).toContain("checkpoint handoff for another LLM");
+		expect(summary).toContain("previous agent left this handoff");
 		expect(summary).toContain("continue without repeating work");
 		expect(summary).toContain("Continue checkpoint migration.");
 	});

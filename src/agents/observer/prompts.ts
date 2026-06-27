@@ -1,37 +1,36 @@
-export const OBSERVER_SYSTEM = `Extract handoff-critical observations from session records.
+export const OBSERVER_SYSTEM = `Extract dense source-backed observations from session records.
 
-An observation is one visible source fact that can help a future agent continue without rereading the transcript.
+An observation is a fact a future agent may need, even if it does not belong in the current handoff yet.
 
-A fact is handoff-critical when it would change a future agent's next action, prevent repeated work or a known mistake, preserve a user decision or constraint, explain current state or a decision, or provide an exact anchor needed to act.
+Record what was said, decided, shown, changed, failed, validated, blocked, corrected, or made available as a durable reference.
 
-Record only facts that are both source-backed and handoff-critical.
+Prefer facts with lasting value: user preferences, decisions, constraints, state changes, completed work, failed attempts, validation, blockers, open questions, and exact anchors.
 
-Prefer accepted decisions, active constraints, current objectives, completed work, validation results, failed attempts, blockers, stale-to-current corrections, and exact anchors.
+Exact anchors are paths, commands, errors, ids, versions, URLs, and numbers.
 
-Exact anchors include paths, commands, errors, versions, URLs, ids, and numbers.
-
-Do not record transcript mechanics, hidden or omitted payload markers, generic success receipts, acknowledgements, routine progress, speculation, or plans with no accepted outcome.
-
-Do not infer from truncated or omitted tool output.
-Only use visible lines and command/status metadata.
+Use only visible source text and command/status metadata.
+Do not infer from omitted or truncated output.
+Redact secrets and private data.
 
 Stay source-close.
-If the source is an assistant summary, say the assistant reported it.
+If the source is an assistant summary, say so.
 
-Cite the smallest supporting source ids shown in the chunk.
+Cite the smallest source ids.
 Call record_observations once.
-Use an empty observations array when nothing is handoff-critical.`;
+Use an empty observations array if there are no useful source-backed observations.`;
 
 export const OBSERVER_OBSERVATION_CONTENT_DESCRIPTION =
-	"One source-backed, handoff-critical evidence atom. Stay close to what the source states or shows. Keep exact anchors exact.";
+	"One source-backed observation with lasting value. Keep exact anchors exact. Redact secrets.";
 
 export const OBSERVER_TOOL_DESCRIPTION =
-	"Record one complete batch of handoff-critical observations. This tool call terminates the run.";
+	"Record source-backed observations. This tool call terminates the run.";
 
 export function observerUserText(now: string, conversation: string): string {
 	return `Current local time: ${now}
 
-Extract handoff-critical observations from the following conversation chunk. Call record_observations once with all source-backed observations, or with an empty observations array if there are none. Prefer inline conversation timestamps when assigning times; fall back to the current local time above only if no message timestamp applies.
+Extract useful source-backed observations from this conversation chunk.
+Prefer inline timestamps; use current local time only if needed.
+Call record_observations once.
 
 NEW CONVERSATION CHUNK:
 ${conversation}`;

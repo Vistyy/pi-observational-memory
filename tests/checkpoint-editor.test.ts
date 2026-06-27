@@ -55,7 +55,7 @@ describe("runCheckpointEditor", () => {
 			const edit = context.tools.find((tool) => tool.name === "edit")!;
 			const finish = context.tools.find((tool) => tool.name === "finish_checkpoint_edit")!;
 			const readResult = await read.execute("read-1", { path: "checkpoint.md" }) as any;
-			expect(readResult.content[0].text).toContain("# Checkpoint");
+			expect(readResult.content[0].text).toContain("# Handoff");
 			await edit.execute("edit-1", { path: "checkpoint.md", oldText: EMPTY_CHECKPOINT_MARKDOWN, newText: next });
 			await finish.execute("finish-1", { reason: "updated objective" });
 		});
@@ -73,6 +73,34 @@ describe("runCheckpointEditor", () => {
 		expect(result).toEqual(expect.objectContaining({ content: next, reason: "updated objective", changed: true }));
 		expect(result?.metrics).toEqual(expect.objectContaining({ readCalls: 1, editCalls: 1, successfulEditCalls: 1, finishCalls: 1, finishRetryCount: 0 }));
 		expect(await readFile(path, "utf-8")).toBe(next);
+	});
+
+	it("exposes write as an update escape hatch", async () => {
+		const path = await draftPath();
+		const next = EMPTY_CHECKPOINT_MARKDOWN.replace("None known.", "Rewritten handoff.");
+		const loop = fakeAgentLoop(async (_prompts, context) => {
+			const read = context.tools.find((tool) => tool.name === "read")!;
+			const write = context.tools.find((tool) => tool.name === "write")!;
+			const finish = context.tools.find((tool) => tool.name === "finish_checkpoint_edit")!;
+			expect(context.tools.some((tool) => tool.name === "edit")).toBe(true);
+			await read.execute("read-1", { path: "checkpoint.md" });
+			await write.execute("write-1", { path: "checkpoint.md", content: next });
+			await finish.execute("finish-1", { reason: "rewritten handoff" });
+		});
+
+		await expect(runCheckpointEditor({
+			model: {},
+			apiKey: "test",
+			draftPath: path,
+			initialContent: EMPTY_CHECKPOINT_MARKDOWN,
+			observationsText: "Observation 1: broad checkpoint rewrite is needed.",
+			purpose: "update",
+			agentLoop: loop,
+		})).resolves.toEqual(expect.objectContaining({
+			content: next,
+			changed: true,
+			metrics: expect.objectContaining({ writeCalls: 1, writeChars: next.length, editCalls: 0 }),
+		}));
 	});
 
 	it("supports a realistic one-tool-per-turn edit workflow", async () => {

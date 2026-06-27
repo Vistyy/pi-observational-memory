@@ -67,7 +67,7 @@ At `message_end`, only check the hard cap.
 Run the observer mid-turn only when at least 32 ready records are pending.
 A mid-turn hard-cap flush must stop at the last safe ready record.
 Do not advance through an in-flight unmatched tool call.
-Checkpoint updates run after non-empty observer output.
+Checkpoint updates run after non-empty observer output when at least 16 uncheckpointed observations are pending or the uncheckpointed source span reaches 64 records.
 Do not run checkpoint updates after empty observer output.
 
 ### Memory lifecycle
@@ -91,27 +91,31 @@ Checkpoint content is stored as Markdown for human/model handoff readability.
 The required v1 template is:
 
 ```md
-# Checkpoint
+# Handoff
 
-## Current objective
+## Focus
 
-## Progress and decisions
+## State
 
-## Important context
+## Next
 
-## Remaining work
+## References
+```
 
-## References and anchors
+The optional section is:
+
+```md
+## Suggested tools or skills
 ```
 
 Required checkpoint sections should always be present, with `None known.` allowed when a section is truly empty.
-Progress and decisions should contain current-state progress: completed outcomes, current decisions, and superseded decisions only when needed to prevent confusion.
-Progress and decisions should not become a chronology of every attempt, edit, or intermediate failure.
-Important context contains meaning, constraints, user preferences, and boundaries.
-Remaining work contains active next work, including blockers when they affect next action.
-References and anchors contain exact handles needed to act, such as paths, files, URLs, commits, ADRs, commands, config keys, versions, package names, validation, release, install, deployment, and exact blocker details.
-Optional appendices should appear only when references and anchors becomes too dense.
-A blocker appendix should appear only when blockers dominate the handoff.
+Focus contains the current objective and likely next action.
+State contains current progress, decisions, constraints, blockers, validation, and stale-to-current corrections.
+State should not become a chronology of every attempt, edit, or intermediate failure.
+Next contains concrete remaining work, including blockers when they affect next action.
+References contains exact handles needed to act, such as paths, files, URLs, commits, ADRs, commands, config keys, versions, package names, validation, release, install, deployment, and exact blocker details.
+References should point to durable artifacts instead of duplicating their contents.
+Suggested tools or skills should appear only when it reduces startup friction for the next agent.
 Model-facing checkpoint rendering should use the plain checkpoint Markdown content and Pi's existing compaction summary wrapper when applicable, rather than introducing a checkpoint-specific XML wrapper in v1.
 Structured metadata such as id, coverage, event provenance, and content format belongs outside the Markdown content.
 TOON or other compact structured formats may be considered later for metadata or token experiments, but not as the v1 checkpoint content format.
@@ -128,13 +132,15 @@ No-change coverage events include a short free-text reason for status/debug use,
 ### CheckpointEditor
 
 The single agent role that updates checkpoint Markdown.
-CheckpointEditor always edits an existing session-scoped draft file with Pi's real `read` and `edit` tools plus a terminal `finish_checkpoint_edit` tool.
-The `read` and `edit` tools should be restricted to the draft file with guarded operations.
+CheckpointEditor always works on an existing session-scoped draft file with restricted tools plus a terminal `finish_checkpoint_edit` tool.
+Update runs use `read`, `edit`, and `write`.
+Prune runs use `read` and `write`.
 The draft file is disposable and is never the durable source of truth.
 The session ledger remains the durable source of truth.
 For update runs, the draft starts as the latest checkpoint or an empty required template, and the prompt includes pending observations.
 For prune runs, the draft starts as the current checkpoint, and the prompt includes no new observations.
-CheckpointEditor should read `checkpoint.md`, edit only that draft file, and change only the spans needed to keep the checkpoint self-contained, current, concise, and valid.
+CheckpointEditor should change only `checkpoint.md` and keep the checkpoint self-contained, current, concise, and valid.
+Update runs should use `edit` for small local changes and `write` for schema migration, invalid checkpoints, exact-edit trouble, or broad restructuring.
 CheckpointEditor must finish by calling a terminal `finish_checkpoint_edit` tool with a short free-text reason.
 OM should ignore normal final prose as completion; if the model edits the draft but does not call the finish tool, the agent loop should prompt it to finish or fail after bounded retries.
 After CheckpointEditor finishes, OM reads the draft, compares it to the pre-run draft, validates it when changed, and commits a full checkpoint snapshot event or a coverage advancement event.
@@ -144,9 +150,9 @@ The draft is discarded after commit or failure.
 
 Checkpoint pruning is a CheckpointEditor run with purpose `prune`.
 Pruning input is strictly the current checkpoint only, with no new observations.
-Pruning output is a smaller checkpoint using the same template.
-Pruning may remove stale or duplicative prose, merge redundant lines, shorten references, and move dense detail into concise anchors.
-Pruning must preserve the current objective, remaining work, current decisions, current constraints or preferences, and actionable references or anchors.
+Pruning output is a smaller checkpoint using the same handoff template.
+Pruning may remove stale or duplicative prose, merge redundant lines, shorten references, and move durable detail into concise anchors.
+Pruning must preserve the focus, current state, next work, current decisions, current constraints or preferences, and actionable references or anchors.
 Checkpoint pruning may run asynchronously for health when a checkpoint exceeds the target budget.
 Under compaction pressure, if the checkpoint is invalid or over the hard max and the gap cannot fit in retained tail, pruning may run synchronously before normal checkpoint catch-up.
 Pruning records a normal `om.checkpoint.recorded` snapshot event with `mode: "prune"`, unchanged checkpoint coverage, and empty `observationIds`.
@@ -156,7 +162,7 @@ Pruning records a normal `om.checkpoint.recorded` snapshot event with `mode: "pr
 Because rolling checkpoints update from the previous checkpoint rather than from the full raw session, the updater is responsible for pruning stale or low-value content during each update.
 Checkpoint size should be controlled by configurable target and maximum token budgets.
 The updater should prefer replacing stale detail over appending.
-The updater should compress within the required template without dropping current actionable anchors.
+The updater should compress within the handoff template without dropping current actionable anchors.
 
 ### Checkpoint events
 

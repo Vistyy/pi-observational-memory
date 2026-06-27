@@ -1,31 +1,30 @@
 export const CHECKPOINT_MARKDOWN_HEADINGS = [
-	"# Checkpoint",
-	"## Current objective",
-	"## Progress and decisions",
-	"## Important context",
-	"## Remaining work",
-	"## References and anchors",
+	"# Handoff",
+	"## Focus",
+	"## State",
+	"## Next",
+	"## References",
 ] as const;
 
-export const EMPTY_CHECKPOINT_MARKDOWN = `# Checkpoint
+export const OPTIONAL_CHECKPOINT_MARKDOWN_HEADINGS = [
+	"## Suggested tools or skills",
+] as const;
 
-## Current objective
+export const EMPTY_CHECKPOINT_MARKDOWN = `# Handoff
 
-None known.
-
-## Progress and decisions
-
-None known.
-
-## Important context
+## Focus
 
 None known.
 
-## Remaining work
+## State
 
 None known.
 
-## References and anchors
+## Next
+
+None known.
+
+## References
 
 None known.`;
 
@@ -34,7 +33,7 @@ export function renderCheckpointHeadingList(): string {
 }
 
 export function checkpointFormatInstructions(): string {
-	return `Use the required headings exactly:\n${renderCheckpointHeadingList()}`;
+	return `Use the required headings exactly:\n${renderCheckpointHeadingList()}\n\nOptional heading when useful:\n${OPTIONAL_CHECKPOINT_MARKDOWN_HEADINGS.join("\n")}`;
 }
 
 export function isValidCheckpointMarkdown(content: string): boolean {

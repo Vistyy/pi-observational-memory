@@ -8,15 +8,16 @@ const SENTINEL_OBSERVATION = "THIS_SENTINEL_OBSERVATION_MUST_NOT_APPEAR";
 describe("checkpoint format", () => {
 	it("validates the shared empty checkpoint template", () => {
 		expect(isValidCheckpointMarkdown(EMPTY_CHECKPOINT_MARKDOWN)).toBe(true);
-		expect(isValidCheckpointMarkdown(EMPTY_CHECKPOINT_MARKDOWN.replace("## Remaining work", "## Work left"))).toBe(false);
+		expect(isValidCheckpointMarkdown(EMPTY_CHECKPOINT_MARKDOWN.replace("## Next", "## Work left"))).toBe(false);
 	});
 
 	it("renders required headings into the checkpoint editor system prompt", () => {
 		for (const heading of CHECKPOINT_MARKDOWN_HEADINGS) expect(CHECKPOINT_EDITOR_SYSTEM).toContain(heading);
 	});
 
-	it("keeps ledger provenance lists out of checkpoint markdown by default", () => {
-		expect(CHECKPOINT_EDITOR_SYSTEM).toContain("Do not add ledger provenance lists");
+	it("keeps durable artifacts referenced instead of duplicated", () => {
+		expect(CHECKPOINT_EDITOR_SYSTEM).toContain("Do not duplicate durable artifacts");
+		expect(CHECKPOINT_EDITOR_SYSTEM).toContain("Redact secrets and private data");
 	});
 });
 
@@ -46,8 +47,9 @@ describe("checkpoint editor prompt branches", () => {
 		expect(prompt).toContain("Purpose: update");
 		expect(prompt).toContain("Pending observations:");
 		expect(prompt).toContain(SENTINEL_OBSERVATION);
-		expect(prompt).toContain("patch to merge");
-		expect(prompt).toContain("handoff-critical content");
+		expect(prompt).toContain("Merge pending observations");
+		expect(prompt).toContain("Use edit for small local changes");
+		expect(prompt).toContain("Use write with the full checkpoint");
 	});
 
 	it("does not render observation framing for prune", () => {
@@ -63,9 +65,9 @@ describe("checkpoint editor prompt branches", () => {
 	it("keeps prune prompt focused on a smaller handoff rewrite", () => {
 		const prompt = checkpointEditorPruneUserText();
 
-		expect(prompt).toContain("smaller handoff");
-		expect(prompt).toContain("another LLM that will resume this session");
-		expect(prompt).toContain("Preserve handoff-critical progress");
+		expect(prompt).toContain("smaller routing handoff");
+		expect(prompt).toContain("Reference durable artifacts instead of copying them");
+		expect(prompt).toContain("useful suggested tools or skills");
 	});
 
 	it("can render eval-only prune size guidance", () => {

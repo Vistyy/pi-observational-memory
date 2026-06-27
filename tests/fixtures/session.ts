@@ -139,7 +139,7 @@ export function checkpoint(
 ): TestCheckpoint {
 	return {
 		id: id.startsWith("check_") ? id : `check_${id}`,
-		content: `# Checkpoint\n\n## Current objective\n\nNone known.\n\n## Progress and decisions\n\nNone known.\n\n## Important context\n\nNone known.\n\n## Remaining work\n\nNone known.\n\n## References and anchors\n\nNone known.`,
+		content: `# Handoff\n\n## Focus\n\nNone known.\n\n## State\n\nNone known.\n\n## Next\n\nNone known.\n\n## References\n\nNone known.`,
 		createdAt: DEFAULT_TIMESTAMP,
 		contentFormat: "markdown",
 		...overrides,

@@ -43,15 +43,15 @@ describe("compaction hook adapter", () => {
 	it("returns lifecycle compaction payload when ready", async () => {
 		const { run } = setup({
 			kind: "ready",
-			summary: "# Checkpoint",
+			summary: "# Handoff",
 			firstKeptEntryId: "raw-1",
 			tokensBefore: 123,
-			details: { type: "om.checkpoint", checkpoint: { id: "check_cccccccccccc", content: "# Checkpoint\n\n## Current objective\n\nNone known.\n\n## Progress and decisions\n\nNone known.\n\n## Important context\n\nNone known.\n\n## Remaining work\n\nNone known.\n\n## References and anchors\n\nNone known.", createdAt: "2026-05-02T10:00:00.000Z", contentFormat: "markdown" } },
+			details: { type: "om.checkpoint", checkpoint: { id: "check_cccccccccccc", content: "# Handoff\n\n## Focus\n\nNone known.\n\n## State\n\nNone known.\n\n## Next\n\nNone known.\n\n## References\n\nNone known.", createdAt: "2026-05-02T10:00:00.000Z", contentFormat: "markdown" } },
 		});
 
 		await expect(run()).resolves.toEqual({
 			compaction: {
-				summary: "# Checkpoint",
+				summary: "# Handoff",
 				firstKeptEntryId: "raw-1",
 				tokensBefore: 123,
 				details: expect.objectContaining({ type: "om.checkpoint" }),

@@ -245,10 +245,10 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		: checkpointEditorUpdateUserText({ observationsText: args.observationsText });
 	const tools = args.purpose === "prune"
 		? [readTool as AgentTool<any>, writeTool as AgentTool<any>, finishTool as AgentTool<any>]
-		: [readTool as AgentTool<any>, editTool as AgentTool<any>, finishTool as AgentTool<any>];
+		: [readTool as AgentTool<any>, editTool as AgentTool<any>, writeTool as AgentTool<any>, finishTool as AgentTool<any>];
 	const toolCallReminder = args.purpose === "prune"
 		? "You must read checkpoint.md, write the full pruned checkpoint.md if needed, and call finish_checkpoint_edit."
-		: "You must update checkpoint.md if needed and call finish_checkpoint_edit.";
+		: "You must read checkpoint.md, update it with edit or write if needed, and call finish_checkpoint_edit.";
 
 	await runMemoryAgentLoop({
 		model: args.model,
