@@ -28,9 +28,32 @@ function observerWorkForTrigger(stateEntries: Entry[], runtime: Runtime, trigger
 	return plan.recordCount >= threshold ? plan.entries as Entry[] : [];
 }
 
-function checkpointPruneDueForTrigger(entries: Entry[], runtime: Runtime, trigger: MemoryUpdateTrigger, checkpointWork: Observation[]): boolean {
+function uncheckpointedSourceSpan(stateEntries: Entry[], observations: Observation[]): number | undefined {
+	const state = buildSessionMemoryState(stateEntries);
+	let minIndex = Number.MAX_SAFE_INTEGER;
+	let maxIndex = -1;
+	for (const observation of observations) {
+		for (const sourceEntryId of observation.sourceEntryIds) {
+			const index = state.idToIndex.get(sourceEntryId);
+			if (index === undefined) return undefined;
+			minIndex = Math.min(minIndex, index);
+			maxIndex = Math.max(maxIndex, index);
+		}
+	}
+	return maxIndex === -1 ? 0 : maxIndex - minIndex + 1;
+}
+
+function checkpointUpdateDue(entries: Entry[], runtime: Runtime, observations: Observation[]): boolean {
+	if (observations.length === 0) return false;
+	if (observations.length >= runtime.config.checkpointUpdateEveryObservations) return true;
+	const span = uncheckpointedSourceSpan(entries, observations);
+	if (span === undefined) return true;
+	return span >= runtime.config.checkpointUpdateEverySourceRecords;
+}
+
+function checkpointPruneDueForTrigger(entries: Entry[], runtime: Runtime, trigger: MemoryUpdateTrigger, uncheckpointedObservations: Observation[]): boolean {
 	if (trigger !== "turn_end") return false;
-	if (checkpointWork.length > 0) return false;
+	if (uncheckpointedObservations.length > 0) return false;
 	const state = buildSessionMemoryState(entries);
 	const checkpoint = state.folded.checkpoint;
 	if (!checkpoint) return false;
@@ -42,7 +65,7 @@ export function computeMemoryStageWork(entries: Entry[], runtime: Runtime, trigg
 	const work = checkpointGap(state);
 	return {
 		observerWork: observerWorkForTrigger(entries, runtime, trigger),
-		checkpointWork: work,
+		checkpointWork: checkpointUpdateDue(entries, runtime, work) ? work : [],
 		checkpointPruneDue: checkpointPruneDueForTrigger(entries, runtime, trigger, work),
 	};
 }

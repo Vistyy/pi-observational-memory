@@ -24,10 +24,22 @@ interface RunCheckpointEditorArgs {
 	onUsage?: (usage: MemoryAgentUsage) => void;
 }
 
+export type CheckpointEditorMetrics = {
+	readCalls: number;
+	editCalls: number;
+	successfulEditCalls: number;
+	failedEditCalls: number;
+	editOldTextChars: number;
+	editNewTextChars: number;
+	finishCalls: number;
+	finishRetryCount: number;
+};
+
 export type CheckpointEditorResult = {
 	content: string;
 	reason: string;
 	changed: boolean;
+	metrics: CheckpointEditorMetrics;
 };
 
 const ReadSchema = Type.Object({
@@ -70,6 +82,16 @@ function errorResult(text: string): any {
 export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promise<CheckpointEditorResult | undefined> {
 	await writeDraft(args.draftPath, args.initialContent);
 	let finishedReason: string | undefined;
+	const metrics: CheckpointEditorMetrics = {
+		readCalls: 0,
+		editCalls: 0,
+		successfulEditCalls: 0,
+		failedEditCalls: 0,
+		editOldTextChars: 0,
+		editNewTextChars: 0,
+		finishCalls: 0,
+		finishRetryCount: 0,
+	};
 
 	const readTool: AgentTool<typeof ReadSchema> = {
 		name: "read",
@@ -77,6 +99,7 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		description: "Read checkpoint.md. Only checkpoint.md is allowed.",
 		parameters: ReadSchema,
 		execute: async (_id, params: ReadArgs) => {
+			metrics.readCalls++;
 			if (!allowedPath(params.path)) {
 				debugLog("checkpoint_editor.tool_result", { tool: "read", ok: false, errorMessage: "Only checkpoint.md may be read." });
 				return errorResult("Only checkpoint.md may be read.");
@@ -93,22 +116,29 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		description: "Replace one exact text span in checkpoint.md. Only checkpoint.md is allowed.",
 		parameters: EditSchema,
 		execute: async (_id, params: EditArgs) => {
+			metrics.editCalls++;
+			metrics.editOldTextChars += params.oldText.length;
+			metrics.editNewTextChars += params.newText.length;
 			if (!allowedPath(params.path)) {
+				metrics.failedEditCalls++;
 				debugLog("checkpoint_editor.tool_result", { tool: "edit", ok: false, errorMessage: "Only checkpoint.md may be edited." });
 				return errorResult("Only checkpoint.md may be edited.");
 			}
 			const current = await readDraft(args.draftPath);
 			const first = current.indexOf(params.oldText);
 			if (first === -1) {
+				metrics.failedEditCalls++;
 				debugLog("checkpoint_editor.tool_result", { tool: "edit", ok: false, errorMessage: "oldText was not found in checkpoint.md.", oldTextChars: params.oldText.length, newTextChars: params.newText.length });
 				return errorResult("oldText was not found in checkpoint.md.");
 			}
 			if (current.indexOf(params.oldText, first + params.oldText.length) !== -1) {
+				metrics.failedEditCalls++;
 				debugLog("checkpoint_editor.tool_result", { tool: "edit", ok: false, errorMessage: "oldText is not unique in checkpoint.md.", oldTextChars: params.oldText.length, newTextChars: params.newText.length });
 				return errorResult("oldText is not unique in checkpoint.md.");
 			}
 			const next = `${current.slice(0, first)}${params.newText}${current.slice(first + params.oldText.length)}`;
 			await writeDraft(args.draftPath, next);
+			metrics.successfulEditCalls++;
 			debugLog("checkpoint_editor.tool_result", { tool: "edit", ok: true, oldTextChars: params.oldText.length, newTextChars: params.newText.length, contentChars: next.length, valid: isValidCheckpointMarkdown(next) });
 			return { content: [{ type: "text", text: "Edited checkpoint.md." }] };
 		},
@@ -120,6 +150,7 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		description: "Finish the checkpoint edit after checkpoint.md is valid.",
 		parameters: FinishSchema,
 		execute: async (_id, params: FinishArgs) => {
+			metrics.finishCalls++;
 			const content = await readDraft(args.draftPath);
 			if (!isValidCheckpointMarkdown(content)) {
 				debugLog("checkpoint_editor.tool_result", { tool: "finish_checkpoint_edit", ok: false, errorMessage: "checkpoint.md is invalid or missing required headings.", contentChars: content.length });
@@ -155,6 +186,7 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 
 	let content = await readDraft(args.draftPath);
 	if (!finishedReason && isValidCheckpointMarkdown(content)) {
+		metrics.finishRetryCount++;
 		debugLog("checkpoint_editor.finish_retry", { changed: content !== args.initialContent, contentChars: content.length });
 		await runMemoryAgentLoop({
 			model: args.model,
@@ -184,5 +216,5 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		});
 		return undefined;
 	}
-	return { content, reason: finishedReason, changed: content !== args.initialContent };
+	return { content, reason: finishedReason, changed: content !== args.initialContent, metrics };
 }

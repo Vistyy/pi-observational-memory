@@ -65,6 +65,9 @@ function realSessionReplayCase(): EvalCase {
 		sessionPath: DEFAULT_REAL_SESSION_PATH,
 		throughEntryId: "74df84d1",
 		maxTurns: 8,
+		runtimeConfig: {
+			checkpointUpdateEveryObservations: 1,
+		},
 		metadata: {
 			sessionPath: DEFAULT_REAL_SESSION_PATH,
 			checkpointEntryId: "7fbd419c",

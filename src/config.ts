@@ -23,6 +23,8 @@ export interface Config {
 	strategy: MemoryStrategy;
 	observeEveryMessages: number;
 	observeHardCapRecords: number;
+	checkpointUpdateEveryObservations: number;
+	checkpointUpdateEverySourceRecords: number;
 	maxInitialObserveTokens: number;
 	observerToolResultSummaryMaxLines: number;
 	observerToolResultErrorMaxLines: number;
@@ -43,6 +45,8 @@ export const DEFAULTS: Config = {
 	strategy: STRATEGY.replacement,
 	observeEveryMessages: 8,
 	observeHardCapRecords: 32,
+	checkpointUpdateEveryObservations: 8,
+	checkpointUpdateEverySourceRecords: 32,
 	maxInitialObserveTokens: 100_000,
 	observerToolResultSummaryMaxLines: 4,
 	observerToolResultErrorMaxLines: 20,
@@ -108,6 +112,8 @@ function normalizeSettingsConfig(value: Record<string, unknown>): Partial<Config
 	const numberKeys = [
 		"observeEveryMessages",
 		"observeHardCapRecords",
+		"checkpointUpdateEveryObservations",
+		"checkpointUpdateEverySourceRecords",
 		"maxInitialObserveTokens",
 		"observerToolResultSummaryMaxLines",
 		"observerToolResultErrorMaxLines",

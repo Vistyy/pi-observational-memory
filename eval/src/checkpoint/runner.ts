@@ -5,10 +5,71 @@ import type { Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { AuthStorage, ModelRegistry } from "@earendil-works/pi-coding-agent";
 import { runCheckpointEditor } from "../../../src/agents/checkpoint-editor/agent.js";
 import type { MemoryAgentUsage } from "../../../src/agents/common.js";
+import { normalizeUsage, PI_USAGE_RECORDED, type UsageRecordedData } from "../../../src/usage.js";
 import { runSessionReplayCase } from "./session-replay.js";
-import type { EditorEvalCase, EvalCase, EvalRecord, EvalSummary, SessionReplayEvalCase } from "./types.js";
+import type { EditorEvalCase, EvalCase, EvalRecord, EvalSummary, EvalUsageBucket, EvalUsageSummary, SessionReplayEvalCase } from "./types.js";
 
 export type ResolvedEvalModel = { model: Model<any>; apiKey: string; headers?: Record<string, string> };
+
+function emptyUsageBucket(): EvalUsageBucket {
+	return { requests: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: 0 };
+}
+
+function addUsage(bucket: EvalUsageBucket, usageValue: unknown): void {
+	const usage = normalizeUsage(usageValue);
+	bucket.requests++;
+	bucket.input += usage.input;
+	bucket.output += usage.output;
+	bucket.cacheRead += usage.cacheRead;
+	bucket.cacheWrite += usage.cacheWrite;
+	bucket.totalTokens += usage.totalTokens;
+	bucket.cost += usage.cost;
+}
+
+function summarizeEvalUsage(entries: Array<{ agent?: string; operation?: string; usage: unknown }>): EvalUsageSummary {
+	const byAgent: Record<string, EvalUsageBucket> = {};
+	const byOperation: Record<string, EvalUsageBucket> = {};
+	for (const entry of entries) {
+		const agent = entry.agent ?? "unknown";
+		byAgent[agent] ??= emptyUsageBucket();
+		addUsage(byAgent[agent], entry.usage);
+		if (entry.operation) {
+			byOperation[entry.operation] ??= emptyUsageBucket();
+			addUsage(byOperation[entry.operation], entry.usage);
+		}
+	}
+	return { byAgent, byOperation };
+}
+
+function isUsageRecordedData(value: unknown): value is UsageRecordedData {
+	return !!value && typeof value === "object" && (value as { schemaVersion?: unknown }).schemaVersion === 1 && (value as { source?: unknown }).source === "extension" && (value as { usage?: unknown }).usage !== undefined;
+}
+
+function extractReplayUsage(result: Awaited<ReturnType<typeof runSessionReplayCase>>, thinking: ModelThinkingLevel): MemoryAgentUsage[] {
+	const requestIndexes = new Map<string, number>();
+	return result.appendedEntries
+		.filter((entry) => entry.type === "custom" && entry.customType === PI_USAGE_RECORDED && isUsageRecordedData(entry.data))
+		.map((entry) => entry.data as UsageRecordedData)
+		.map((data) => {
+			const agent = data.agent ?? "unknown";
+			const requestIndex = (requestIndexes.get(agent) ?? 0) + 1;
+			requestIndexes.set(agent, requestIndex);
+			return {
+				agent: data.agent === "observer" || data.agent === "checkpoint-editor" ? data.agent : undefined,
+				requestIndex,
+				model: data.model,
+				thinkingLevel: thinking,
+				durationMs: 0,
+				usage: data.usage,
+			};
+		});
+}
+
+function extractReplayUsageSummary(result: Awaited<ReturnType<typeof runSessionReplayCase>>): EvalUsageSummary {
+	return summarizeEvalUsage(result.appendedEntries
+		.filter((entry) => entry.type === "custom" && entry.customType === PI_USAGE_RECORDED && isUsageRecordedData(entry.data))
+		.map((entry) => entry.data as UsageRecordedData));
+}
 
 export function parseModelSpec(spec: string): [provider: string, id: string] {
 	const [provider, ...rest] = spec.split("/");
@@ -46,6 +107,7 @@ async function runEditorCase(testCase: EditorEvalCase, resolved: ResolvedEvalMod
 			onUsage: (entry) => usage.push(entry),
 		});
 		const grade = testCase.grade(result);
+		const usageSummary = summarizeEvalUsage(usage.map((entry) => ({ agent: entry.agent, operation: entry.agent, usage: entry.usage })));
 		return {
 			kind: "editor",
 			id: testCase.id,
@@ -57,6 +119,8 @@ async function runEditorCase(testCase: EditorEvalCase, resolved: ResolvedEvalMod
 			changed: result?.changed,
 			content: result?.content,
 			usage,
+			usageSummary,
+			checkpointEditorMetrics: result?.metrics,
 			durationMs: Date.now() - started,
 			metadata: testCase.metadata,
 			initialContent: testCase.initialContent,
@@ -69,11 +133,12 @@ async function runEditorCase(testCase: EditorEvalCase, resolved: ResolvedEvalMod
 	}
 }
 
-async function runReplayCase(testCase: SessionReplayEvalCase, resolved: ResolvedEvalModel, iteration: number): Promise<EvalRecord> {
+async function runReplayCase(testCase: SessionReplayEvalCase, resolved: ResolvedEvalModel, thinking: ModelThinkingLevel, iteration: number): Promise<EvalRecord> {
 	const started = Date.now();
 	try {
 		const result = await runSessionReplayCase(testCase, resolved);
 		const grade = testCase.grade(result);
+		const usage = extractReplayUsage(result, thinking);
 		return {
 			kind: "session-replay",
 			id: testCase.id,
@@ -83,7 +148,8 @@ async function runReplayCase(testCase: SessionReplayEvalCase, resolved: Resolved
 			missing: grade.missing ?? [],
 			incorrect: grade.incorrect ?? [],
 			content: result.content,
-			usage: [],
+			usage,
+			usageSummary: extractReplayUsageSummary(result),
 			durationMs: Date.now() - started,
 			metadata: testCase.metadata,
 			initialEntryCount: result.initialEntryCount,
@@ -120,7 +186,7 @@ function runtimeErrorRecord(id: string, kind: "editor" | "session-replay", itera
 }
 
 export async function runCase(testCase: EvalCase, resolved: ResolvedEvalModel, thinking: ModelThinkingLevel, iteration: number): Promise<EvalRecord> {
-	if (testCase.kind === "session-replay") return runReplayCase(testCase, resolved, iteration);
+	if (testCase.kind === "session-replay") return runReplayCase(testCase, resolved, thinking, iteration);
 	return runEditorCase(testCase, resolved, thinking, iteration);
 }
 

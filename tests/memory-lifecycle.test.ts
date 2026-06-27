@@ -56,6 +56,8 @@ function setup(args: {
 	entries: TestEntry[];
 	observeEveryMessages?: number;
 	observeHardCapRecords?: number;
+	checkpointUpdateEveryObservations?: number;
+	checkpointUpdateEverySourceRecords?: number;
 	maxInitialObserveTokens?: number;
 	checkpointPruneTargetTokens?: number;
 	checkpointPruneHardMaxTokens?: number;
@@ -74,6 +76,8 @@ function setup(args: {
 			debugLog: false,
 			observeEveryMessages: args.observeEveryMessages ?? 1,
 			observeHardCapRecords: args.observeHardCapRecords ?? 32,
+			checkpointUpdateEveryObservations: args.checkpointUpdateEveryObservations ?? 8,
+			checkpointUpdateEverySourceRecords: args.checkpointUpdateEverySourceRecords ?? 32,
 			maxInitialObserveTokens: args.maxInitialObserveTokens ?? 100_000,
 			observerToolResultSummaryMaxLines: 4,
 			observerToolResultErrorMaxLines: 20,
@@ -160,7 +164,7 @@ describe("MemoryLifecycle", () => {
 		expect(mockAgents.runObserver).toHaveBeenCalledTimes(2);
 	});
 
-	it("runs observer and then checkpoint update in the same update", async () => {
+	it("records observer output but defers checkpoint update below thresholds", async () => {
 		const obs = observation("cccccccccccc", { sourceEntryIds: ["raw-1"] });
 		mockAgents.runObserver.mockResolvedValueOnce([obs]);
 		const setupResult = setup({ entries: [rawMessage("raw-1", "aaaaaaaa")] });
@@ -168,21 +172,72 @@ describe("MemoryLifecycle", () => {
 		await setupResult.lifecycle.runNow("turn_end", setupResult.ctx as never);
 
 		expect(mockAgents.runObserver).toHaveBeenCalledWith(expect.objectContaining({ allowedSourceEntryIds: ["raw-1"], maxTurns: 9, thinkingLevel: "minimal" }));
-		expect(mockAgents.runCheckpointEditor).toHaveBeenCalledWith(expect.objectContaining({ observationsText: expect.stringContaining(obs.content), purpose: "update", thinkingLevel: "medium" }));
+		expect(mockAgents.runCheckpointEditor).not.toHaveBeenCalled();
 		expect(setupResult.getMemoryAppends()).toEqual([
 			{ customType: OM_OBSERVATIONS_RECORDED, data: { observations: [obs], coversUpToId: "raw-1" } },
-			expect.objectContaining({ customType: OM_CHECKPOINT_RECORDED }),
 		]);
 	});
 
-	it("runs checkpoint-only when observations are uncheckpointed", async () => {
+	it("runs checkpoint update after observer when observation threshold is reached", async () => {
+		const observations = Array.from({ length: 8 }, (_, i) => observation(`${i + 1}`.padStart(12, "0"), { sourceEntryIds: ["raw-1"] }));
+		mockAgents.runObserver.mockResolvedValueOnce(observations);
+		const setupResult = setup({ entries: [rawMessage("raw-1", "aaaaaaaa")] });
+
+		await setupResult.lifecycle.runNow("turn_end", setupResult.ctx as never);
+
+		expect(mockAgents.runCheckpointEditor).toHaveBeenCalledWith(expect.objectContaining({ observationsText: expect.stringContaining(observations[0].content), purpose: "update", thinkingLevel: "medium" }));
+		expect(setupResult.getMemoryAppends().map((entry) => entry.customType)).toEqual([OM_OBSERVATIONS_RECORDED, OM_CHECKPOINT_RECORDED]);
+	});
+
+	it("does not run checkpoint-only below checkpoint update thresholds", async () => {
 		const obs = observation("aaaaaaaaaaaa", { sourceEntryIds: ["raw-1"] });
 		const setupResult = setup({ entries: [rawMessage("raw-1", "aaaaaaaa"), observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" })], observeEveryMessages: 999 });
 
 		await setupResult.lifecycle.runNow("turn_end", setupResult.ctx as never);
 
 		expect(mockAgents.runObserver).not.toHaveBeenCalled();
+		expect(mockAgents.runCheckpointEditor).not.toHaveBeenCalled();
+	});
+
+	it("runs checkpoint-only when observation threshold is reached", async () => {
+		const observations = Array.from({ length: 8 }, (_, i) => observation(`${i + 1}`.padStart(12, "0"), { sourceEntryIds: ["raw-1"] }));
+		const setupResult = setup({ entries: [rawMessage("raw-1", "aaaaaaaa"), observationsRecordedEntry("om-obs", { observations, coversUpToId: "raw-1" })], observeEveryMessages: 999 });
+
+		await setupResult.lifecycle.runNow("turn_end", setupResult.ctx as never);
+
+		expect(mockAgents.runObserver).not.toHaveBeenCalled();
 		expect(mockAgents.runCheckpointEditor).toHaveBeenCalledOnce();
+	});
+
+	it("runs checkpoint-only when source span threshold is reached", async () => {
+		const entries = Array.from({ length: 32 }, (_, i) => rawMessage(`raw-${i + 1}`, "aaaaaaaa"));
+		const observations = [
+			observation("aaaaaaaaaaaa", { sourceEntryIds: ["raw-1"] }),
+			observation("bbbbbbbbbbbb", { sourceEntryIds: ["raw-32"] }),
+		];
+		const setupResult = setup({ entries: [...entries, observationsRecordedEntry("om-obs", { observations, coversUpToId: "raw-32" })], observeEveryMessages: 999 });
+
+		await setupResult.lifecycle.runNow("turn_end", setupResult.ctx as never);
+
+		expect(mockAgents.runObserver).not.toHaveBeenCalled();
+		expect(mockAgents.runCheckpointEditor).toHaveBeenCalledOnce();
+	});
+
+	it("does not run health prune while checkpoint update backlog is below threshold", async () => {
+		const obs = observation("aaaaaaaaaaaa", { sourceEntryIds: ["raw-1"] });
+		const check = checkpoint("cccccccccccc", {
+			content: EMPTY_CHECKPOINT_MARKDOWN.replace("None known.", `${"large checkpoint detail ".repeat(80)}.`),
+		});
+		const setupResult = setup({ entries: [
+			rawMessage("raw-1", "aaaaaaaa"),
+			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
+			checkpointRecordedEntry("om-check", { checkpoint: check, coversUpToObservationId: "obs_000000000000", observationIds: [] }),
+		], observeEveryMessages: 999, checkpointPruneTargetTokens: 1 });
+
+		await setupResult.lifecycle.runNow("turn_end", setupResult.ctx as never);
+
+		expect(mockAgents.runObserver).not.toHaveBeenCalled();
+		expect(mockAgents.runCheckpointEditor).not.toHaveBeenCalled();
 	});
 
 	it("does no work when checkpoint coverage is current", async () => {
@@ -205,7 +260,7 @@ describe("MemoryLifecycle", () => {
 		const setupResult = setup({ entries: [
 			rawMessage("raw-1", "aaaaaaaa"),
 			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
-		], observeEveryMessages: 999 });
+		], observeEveryMessages: 999, checkpointUpdateEveryObservations: 1 });
 
 		await setupResult.lifecycle.runNow("turn_end", setupResult.ctx as never);
 
@@ -220,7 +275,7 @@ describe("MemoryLifecycle", () => {
 		const setupResult = setup({ entries: [
 			rawMessage("raw-1", "aaaaaaaa"),
 			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
-		], observeEveryMessages: 999 });
+		], observeEveryMessages: 999, checkpointUpdateEveryObservations: 1 });
 
 		await setupResult.lifecycle.runNow("turn_end", setupResult.ctx as never);
 
@@ -234,7 +289,7 @@ describe("MemoryLifecycle", () => {
 		const setupResult = setup({ entries: [
 			rawMessage("raw-1", "aaaaaaaa"),
 			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
-		], observeEveryMessages: 999 });
+		], observeEveryMessages: 999, checkpointUpdateEveryObservations: 1 });
 
 		await setupResult.lifecycle.runNow("turn_end", setupResult.ctx as never);
 
@@ -249,7 +304,7 @@ describe("MemoryLifecycle", () => {
 		const setupResult = setup({ entries: [
 			rawMessage("raw-1", "aaaaaaaa"),
 			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
-		], observeEveryMessages: 999 });
+		], observeEveryMessages: 999, checkpointUpdateEveryObservations: 1 });
 
 		await setupResult.lifecycle.runNow("turn_end", setupResult.ctx as never);
 
@@ -352,7 +407,7 @@ describe("MemoryLifecycle", () => {
 		mockAgents.runCheckpointEditor.mockReset();
 		mockAgents.runCheckpointEditor.mockRejectedValueOnce(new Error("checkpoint failed"));
 		const obs = observation("aaaaaaaaaaaa", { sourceEntryIds: ["raw-1"] });
-		const checkpointFailure = setup({ entries: [rawMessage("raw-1", "aaaaaaaa"), observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" })], observeEveryMessages: 999 });
+		const checkpointFailure = setup({ entries: [rawMessage("raw-1", "aaaaaaaa"), observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" })], observeEveryMessages: 999, checkpointUpdateEveryObservations: 1 });
 		await checkpointFailure.lifecycle.runNow("turn_end", checkpointFailure.ctx as never);
 		expect(checkpointFailure.lifecycle.status(checkpointFailure.getEntries() as never).lastCheckpointEditorError).toBe("checkpoint failed");
 		expect(checkpointFailure.getMemoryAppends()).toEqual([]);

@@ -1,5 +1,5 @@
 import type { MemoryAgentUsage } from "../../../src/agents/common.js";
-import type { CheckpointEditorResult } from "../../../src/agents/checkpoint-editor/agent.js";
+import type { CheckpointEditorMetrics, CheckpointEditorResult } from "../../../src/agents/checkpoint-editor/agent.js";
 import type { Config } from "../../../src/config.js";
 import type { Checkpoint, Entry, Observation } from "../../../src/session-ledger/index.js";
 
@@ -53,6 +53,21 @@ export type SessionReplayEvalCase = {
 
 export type EvalCase = EditorEvalCase | SessionReplayEvalCase;
 
+export type EvalUsageBucket = {
+	requests: number;
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	totalTokens: number;
+	cost: number;
+};
+
+export type EvalUsageSummary = {
+	byAgent: Record<string, EvalUsageBucket>;
+	byOperation: Record<string, EvalUsageBucket>;
+};
+
 export type EvalRecord = {
 	kind: EvalCase["kind"] | "editor";
 	id: string;
@@ -64,6 +79,8 @@ export type EvalRecord = {
 	changed?: boolean;
 	content?: string;
 	usage: MemoryAgentUsage[];
+	usageSummary?: EvalUsageSummary;
+	checkpointEditorMetrics?: CheckpointEditorMetrics;
 	durationMs: number;
 	error?: string;
 	metadata?: Record<string, unknown>;

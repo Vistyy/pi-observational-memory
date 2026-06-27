@@ -70,7 +70,8 @@ describe("runCheckpointEditor", () => {
 			agentLoop: loop,
 		});
 
-		expect(result).toEqual({ content: next, reason: "updated objective", changed: true });
+		expect(result).toEqual(expect.objectContaining({ content: next, reason: "updated objective", changed: true }));
+		expect(result?.metrics).toEqual(expect.objectContaining({ readCalls: 1, editCalls: 1, successfulEditCalls: 1, finishCalls: 1, finishRetryCount: 0 }));
 		expect(await readFile(path, "utf-8")).toBe(next);
 	});
 
@@ -91,7 +92,7 @@ describe("runCheckpointEditor", () => {
 			observationsText: "Observation 1: User asked for checkpoint editor.",
 			purpose: "update",
 			agentLoop: loop,
-		})).resolves.toEqual({ content: next, reason: "updated objective", changed: true });
+		})).resolves.toEqual(expect.objectContaining({ content: next, reason: "updated objective", changed: true }));
 	});
 
 	it("supports a realistic finish retry after read-only first pass", async () => {
@@ -116,7 +117,7 @@ describe("runCheckpointEditor", () => {
 			observationsText: "None.",
 			purpose: "prune",
 			agentLoop: loop,
-		})).resolves.toEqual({ content: EMPTY_CHECKPOINT_MARKDOWN, reason: "already valid", changed: false });
+		})).resolves.toEqual(expect.objectContaining({ content: EMPTY_CHECKPOINT_MARKDOWN, reason: "already valid", changed: false }));
 	});
 
 	it("returns undefined when finish is not called", async () => {
@@ -154,7 +155,12 @@ describe("runCheckpointEditor", () => {
 			observationsText: "None.",
 			purpose: "prune",
 			agentLoop: loop,
-		})).resolves.toEqual({ content: EMPTY_CHECKPOINT_MARKDOWN, reason: "already valid", changed: false });
+		})).resolves.toEqual(expect.objectContaining({
+			content: EMPTY_CHECKPOINT_MARKDOWN,
+			reason: "already valid",
+			changed: false,
+			metrics: expect.objectContaining({ finishRetryCount: 1 }),
+		}));
 		expect(callCount).toBe(2);
 	});
 });

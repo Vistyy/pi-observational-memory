@@ -52,6 +52,8 @@ Configure under `observational-memory`:
     "strategy": "replacement",
     "observeEveryMessages": 8,
     "observeHardCapRecords": 32,
+    "checkpointUpdateEveryObservations": 8,
+    "checkpointUpdateEverySourceRecords": 32,
     "maxInitialObserveTokens": 100000,
     "observerThinking": "low",
     "debugLog": false
@@ -80,6 +82,8 @@ Strategies:
 
 `observeEveryMessages` controls the turn-end observer threshold.
 `observeHardCapRecords` controls the mid-turn emergency observer threshold.
+`checkpointUpdateEveryObservations` controls how many uncheckpointed observations trigger a checkpoint update.
+`checkpointUpdateEverySourceRecords` controls how wide an uncheckpointed source span triggers a checkpoint update.
 `maxInitialObserveTokens` prevents expensive backfill when OM starts on an already-large session.
 Old history may be marked covered, while future turns are still observed.
 `agentMaxTurns` limits worker agent loops.
