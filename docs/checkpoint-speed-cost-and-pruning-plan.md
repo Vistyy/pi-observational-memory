@@ -124,12 +124,12 @@ Both evals should include:
 - handoff-critical details that must survive
 - stale details that must be removed
 - duration metrics
-- per-request duration metrics
-- request context size estimates
+- per-request duration metrics, using existing provider request usage where available
+- request context size estimates, adding them to eval artifacts if they are only debug logs today
 - CheckpointEditor read calls
 - CheckpointEditor edit calls
 - successful and failed edit calls
-- edit failure reason counts
+- edit failure reason counts, adding them if only aggregate failed edit calls exist today
 - total edit `oldText` chars
 - total edit `newText` chars
 - finish calls
