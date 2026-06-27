@@ -212,10 +212,7 @@ export function loadCheckpointEvalCases(): EvalCase[] {
 			initialContent: EMPTY_CHECKPOINT_MARKDOWN,
 			observationsText: [
 				"Observation 1:",
-				"id: obs_111111111111",
-				"time: 2026-06-26T10:00:00.000Z",
-				"sourceEntryIds: user-1, tool-1",
-				"content: Current task is migrating OM to checkpoint memory in /home/syzom/projects/pi-extensions/pi-observational-memory. Validation passed with `pnpm typecheck && pnpm test -- --reporter=dot`, 14 test files and 85 tests passed.",
+				"Current task is migrating OM to checkpoint memory in /home/syzom/projects/pi-extensions/pi-observational-memory. Validation passed with `pnpm typecheck && pnpm test -- --reporter=dot`, 14 test files and 85 tests passed.",
 			].join("\n"),
 			maxTurns: 8,
 			grade: (result) => gradeContent(result, {
@@ -229,10 +226,7 @@ export function loadCheckpointEvalCases(): EvalCase[] {
 			initialContent: baseWithObjective.replace("None known.", "apiMode=legacy is the current API mode."),
 			observationsText: [
 				"Observation 1:",
-				"id: obs_222222222222",
-				"time: 2026-06-26T10:05:00.000Z",
-				"sourceEntryIds: user-2",
-				"content: The old apiMode=legacy statement is stale. Current API mode is apiMode=streaming, and legacy must not guide implementation.",
+				"The old apiMode=legacy statement is stale. Current API mode is apiMode=streaming, and legacy must not guide implementation.",
 			].join("\n"),
 			grade: (result) => gradeContent(result, {
 				requireChanged: true,
@@ -246,10 +240,7 @@ export function loadCheckpointEvalCases(): EvalCase[] {
 			initialContent: baseWithObjective.replace("None known.", "Checkpoint updates preserve exact commands, paths, ids, blockers, and stale/current transitions."),
 			observationsText: [
 				"Observation 1:",
-				"id: obs_333333333333",
-				"time: 2026-06-26T10:10:00.000Z",
-				"sourceEntryIds: user-3",
-				"content: Reminder: checkpoint updates should preserve exact commands, paths, ids, blockers, and stale/current transitions.",
+				"Reminder: checkpoint updates should preserve exact commands, paths, ids, blockers, and stale/current transitions.",
 			].join("\n"),
 			grade: (result) => gradeContent(result, {
 				requireUnchanged: true,

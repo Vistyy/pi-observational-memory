@@ -19,10 +19,7 @@ export function renderObservationsForCheckpointEditor(observations: readonly Obs
 	return observations
 		.map((observation, index) => [
 			`Observation ${index + 1}:`,
-			`id: ${observation.id}`,
-			`time: ${observation.timestamp}`,
-			`sourceEntryIds: ${observation.sourceEntryIds.join(", ")}`,
-			`content: ${observation.content}`,
+			observation.content,
 		].join("\n"))
 		.join("\n\n");
 }

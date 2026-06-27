@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CHECKPOINT_EDITOR_SYSTEM, checkpointEditorPruneUserText, checkpointEditorUpdateUserText, checkpointEditorUserText } from "../src/agents/checkpoint-editor/prompts.js";
+import { renderObservationsForCheckpointEditor } from "../src/memory/checkpoint.js";
 import { CHECKPOINT_MARKDOWN_HEADINGS, EMPTY_CHECKPOINT_MARKDOWN, isValidCheckpointMarkdown } from "../src/memory/checkpoint-format.js";
 
 const SENTINEL_OBSERVATION = "THIS_SENTINEL_OBSERVATION_MUST_NOT_APPEAR";
@@ -15,8 +16,26 @@ describe("checkpoint format", () => {
 	});
 
 	it("keeps ledger provenance lists out of checkpoint markdown by default", () => {
-		expect(CHECKPOINT_EDITOR_SYSTEM).toContain("Do not preserve observation ids or source entry ids");
 		expect(CHECKPOINT_EDITOR_SYSTEM).toContain("Do not add ledger provenance lists");
+	});
+});
+
+describe("checkpoint observation rendering", () => {
+	it("passes observation content without ledger ids to the checkpoint editor", () => {
+		const text = renderObservationsForCheckpointEditor([{
+			id: "obs_aaaaaaaaaaaa",
+			kind: "observation",
+			content: "Preserve the exact command pnpm typecheck.",
+			createdAt: "2026-06-27T10:00:00.000Z",
+			timestamp: "2026-06-27T10:00:00.000Z",
+			sourceEntryIds: ["raw-1", "raw-2"],
+		}]);
+
+		expect(text).toContain("Observation 1:");
+		expect(text).toContain("Preserve the exact command pnpm typecheck.");
+		expect(text).not.toContain("obs_aaaaaaaaaaaa");
+		expect(text).not.toContain("raw-1");
+		expect(text).not.toContain("sourceEntryIds");
 	});
 });
 

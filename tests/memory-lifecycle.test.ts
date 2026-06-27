@@ -168,7 +168,7 @@ describe("MemoryLifecycle", () => {
 		await setupResult.lifecycle.runNow("turn_end", setupResult.ctx as never);
 
 		expect(mockAgents.runObserver).toHaveBeenCalledWith(expect.objectContaining({ allowedSourceEntryIds: ["raw-1"], maxTurns: 9, thinkingLevel: "minimal" }));
-		expect(mockAgents.runCheckpointEditor).toHaveBeenCalledWith(expect.objectContaining({ observationsText: expect.stringContaining(obs.id), purpose: "update", thinkingLevel: "medium" }));
+		expect(mockAgents.runCheckpointEditor).toHaveBeenCalledWith(expect.objectContaining({ observationsText: expect.stringContaining(obs.content), purpose: "update", thinkingLevel: "medium" }));
 		expect(setupResult.getMemoryAppends()).toEqual([
 			{ customType: OM_OBSERVATIONS_RECORDED, data: { observations: [obs], coversUpToId: "raw-1" } },
 			expect.objectContaining({ customType: OM_CHECKPOINT_RECORDED }),
@@ -367,7 +367,7 @@ describe("MemoryLifecycle", () => {
 
 		expect(result).toEqual(expect.objectContaining({ kind: "ready", firstKeptEntryId: "raw-2", tokensBefore: 123, summary: expect.stringContaining("# Checkpoint"), details: expect.objectContaining({ type: "om.checkpoint" }) }));
 		expect(mockAgents.runObserver).toHaveBeenCalledOnce();
-		expect(mockAgents.runCheckpointEditor).toHaveBeenCalledWith(expect.objectContaining({ observationsText: expect.stringContaining(obs.id), purpose: "update" }));
+		expect(mockAgents.runCheckpointEditor).toHaveBeenCalledWith(expect.objectContaining({ observationsText: expect.stringContaining(obs.content), purpose: "update" }));
 	});
 
 	it("cancels compaction when checkpoint catch-up fails", async () => {

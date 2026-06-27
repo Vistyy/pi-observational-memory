@@ -9,7 +9,6 @@ Treat the existing checkpoint as the authoritative current handoff.
 ${checkpointFormatInstructions()}
 
 Preserve exact anchors that are useful to the future coding agent: paths, commands, errors, versions, URLs, validation results, install/push/release state, stale/current transitions, blockers, and user instructions.
-Do not preserve observation ids or source entry ids in checkpoint.md unless they are directly actionable through an available tool or explicitly needed for the current test/debugging task.
 Do not add ledger provenance lists to checkpoint.md.
 Preserve still-active objectives, decisions, constraints, unresolved questions, active workstreams, and remaining work.
 Before editing, identify the active workstreams already present in checkpoint.md.
