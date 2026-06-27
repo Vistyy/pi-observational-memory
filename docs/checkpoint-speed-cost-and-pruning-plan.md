@@ -155,6 +155,10 @@ The first diagnostic run should compare several prompt guidance variants on both
 
 This produces six initial diagnostic cases.
 
+Run each case once at first.
+
+Repeat later only if the first results look noisy.
+
 The guided variants must stay eval variants until they prove they improve shrink quality without losing important facts.
 
 The evals should be diagnostic-only for latency at first.
