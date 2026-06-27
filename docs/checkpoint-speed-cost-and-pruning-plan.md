@@ -143,7 +143,11 @@ Both evals should include:
 - cache read tokens
 - cache write tokens
 
-The evals should fail if pruning destroys required handoff facts.
+The synthetic evals should fail if pruning destroys required handoff facts.
+
+The real-latest evals should use light checks only, because they should not hardcode private session content into the eval.
+
+The real-latest checks should require a valid checkpoint, required headings, clear shrinkage, and only safe structural anchors if needed.
 
 The evals should require a clear checkpoint size reduction, but they should not initially require pruning below the normal target or hard max.
 
