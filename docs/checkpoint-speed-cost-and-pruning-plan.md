@@ -222,10 +222,11 @@ Do not trade away checkpoint quality for small savings.
 
 ## Recommended implementation order
 
-1. Add red-capable synthetic and real-latest large-checkpoint prune diagnostic evals.
-2. Add missing diagnostic metrics needed to explain prune slowness.
-3. Verify current baseline metrics for update, prune, and session replay.
-4. Add prompt gate updates if they are not already present.
-5. Add or verify checkpoint cadence thresholds.
-6. Make health prune run in the background instead of blocking interactive paths.
-7. Only then test edit-history redaction, deterministic fallback, or terminal edit variants.
+1. Add red-capable synthetic and real-latest large-checkpoint editor-prune diagnostic evals.
+2. Add missing diagnostic metrics needed to explain editor-prune slowness.
+3. Run those evals before adding compaction or fork lifecycle evals.
+4. Verify current baseline metrics for update, prune, and session replay.
+5. Add prompt gate updates if they are not already present.
+6. Add or verify checkpoint cadence thresholds.
+7. Make health prune run in the background instead of blocking interactive paths.
+8. Only then test edit-history redaction, deterministic fallback, or terminal edit variants.
