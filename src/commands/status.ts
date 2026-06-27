@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { MemoryLifecycle } from "../memory-update/lifecycle.js";
 import type { Runtime } from "../runtime.js";
-import { planObserverRecordBatch } from "../memory/serialization/observer.js";
 import { foldLedger, type Entry } from "../session-ledger/index.js";
 import { PI_USAGE_RECORDED, normalizeUsage, type UsageTotals } from "../usage.js";
 
@@ -56,7 +56,7 @@ function firstArg(args: unknown): string | undefined {
 	return undefined;
 }
 
-export async function runStatusCommand(args: unknown, ctx: any, runtime: Runtime): Promise<void> {
+export async function runStatusCommand(args: unknown, ctx: any, runtime: Runtime, lifecycle: MemoryLifecycle): Promise<void> {
 	runtime.ensureConfig(ctx.cwd);
 	const mode = firstArg(args);
 	if (mode && mode !== "full") {
@@ -67,15 +67,7 @@ export async function runStatusCommand(args: unknown, ctx: any, runtime: Runtime
 	const entries = ctx.sessionManager.getBranch() as Entry[];
 	const folded = foldLedger(entries);
 	const checkpoint = folded.checkpoint;
-	const pendingObserverEntries = entries.slice(folded.lastObservationCoverageIndex + 1);
-	const observeGap = planObserverRecordBatch(pendingObserverEntries, {
-		toolResultSummaryMaxLines: runtime.config.observerToolResultSummaryMaxLines,
-		toolResultErrorMaxLines: runtime.config.observerToolResultErrorMaxLines,
-		toolResultLineMaxChars: runtime.config.observerToolResultLineMaxChars,
-		toolOutputPolicies: runtime.config.observerToolOutputPolicies,
-		allowTailIncompleteToolCalls: true,
-	}).recordCount;
-	const checkpointGap = folded.uncheckpointedObservations.length;
+	const health = lifecycle.status(entries);
 	const lines = [
 		"── Checkpoint ──",
 		`Current:      ${checkpoint ? checkpoint.id : "none"}`,
@@ -83,8 +75,8 @@ export async function runStatusCommand(args: unknown, ctx: any, runtime: Runtime
 		`Coverage:     ${folded.lastCheckpointCoverageObservationId ?? "none"}`,
 		"",
 		"── Next work ──",
-		`Observe gap:    ${observeGap.toLocaleString()} records`,
-		`Checkpoint gap: ${checkpointGap.toLocaleString()} observations`,
+		`Observe gap:    ${health.observeGap.toLocaleString()} records`,
+		`Checkpoint gap: ${health.checkpointGap.toLocaleString()} observations`,
 	];
 
 	if (mode === "full") {
@@ -104,27 +96,27 @@ export async function runStatusCommand(args: unknown, ctx: any, runtime: Runtime
 		}
 	}
 
-	if (runtime.memoryUpdateInFlight || runtime.compactHookInFlight) {
+	if (health.memoryUpdateInFlight || health.compactHookInFlight) {
 		lines.push("", "── In flight ──");
-		if (runtime.memoryUpdateInFlight) {
-			const phase = runtime.memoryUpdatePhase ? ` (${runtime.memoryUpdatePhase})` : "";
+		if (health.memoryUpdateInFlight) {
+			const phase = health.memoryUpdatePhase ? ` (${health.memoryUpdatePhase})` : "";
 			lines.push(`Memory update: running${phase}`);
 		}
-		if (runtime.compactHookInFlight) lines.push("Compaction hook: running");
+		if (health.compactHookInFlight) lines.push("Compaction hook: running");
 	}
 
-	if (runtime.lastObserverError || runtime.lastCheckpointEditorError) {
+	if (health.lastObserverError || health.lastCheckpointEditorError) {
 		lines.push("", "── Last error ──");
-		if (runtime.lastObserverError) lines.push(`Observer: ${runtime.lastObserverError}`);
-		if (runtime.lastCheckpointEditorError) lines.push(`CheckpointEditor: ${runtime.lastCheckpointEditorError}`);
+		if (health.lastObserverError) lines.push(`Observer: ${health.lastObserverError}`);
+		if (health.lastCheckpointEditorError) lines.push(`CheckpointEditor: ${health.lastCheckpointEditorError}`);
 	}
 
 	ctx.ui.notify(lines.join("\n"), "info");
 }
 
-export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime): void {
+export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime, lifecycle: MemoryLifecycle): void {
 	pi.registerCommand("om:status", {
 		description: "Show observational memory checkpoint status",
-		handler: async (args, ctx) => runStatusCommand(args, ctx, runtime),
+		handler: async (args, ctx) => runStatusCommand(args, ctx, runtime, lifecycle),
 	});
 }

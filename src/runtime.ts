@@ -6,7 +6,6 @@ export type ResolveResult =
 
 type NotifyLevel = "warning" | "info" | "error";
 type Notify = (message: string, type?: NotifyLevel) => void;
-export type MemoryUpdatePhase = "observer" | "checkpoint-editor";
 
 export interface RuntimeCtx {
 	model?: unknown;
@@ -18,14 +17,7 @@ export interface RuntimeCtx {
 export class Runtime {
 	config: Config = { ...DEFAULTS };
 	configLoaded = false;
-	memoryUpdateInFlight = false;
-	memoryUpdateRerunRequested = false;
-	inFlightObserverStagePromise: Promise<void> | null = null;
-	memoryUpdatePhase: MemoryUpdatePhase | undefined;
-	compactHookInFlight = false;
 	resolveFailureNotified = false;
-	lastObserverError: string | undefined;
-	lastCheckpointEditorError: string | undefined;
 
 	ensureConfig(cwd: string): void {
 		if (this.configLoaded) return;
@@ -53,45 +45,5 @@ export class Runtime {
 			return { ok: false, reason: `no API key for provider "${provider}"` };
 		}
 		return { ok: true, model, apiKey: auth.apiKey as string, headers: auth.headers as Record<string, string> | undefined };
-	}
-
-	launchMemoryUpdateTask(ctx: RuntimeCtx, work: () => Promise<void>): Promise<void> {
-		this.memoryUpdateInFlight = true;
-		this.memoryUpdatePhase = undefined;
-		this.lastObserverError = undefined;
-		this.lastCheckpointEditorError = undefined;
-		return this.launchTrackedTask(ctx, "memory update", work, () => {
-			this.memoryUpdateInFlight = false;
-			this.memoryUpdatePhase = undefined;
-		});
-	}
-
-	recordMemoryUpdateStageError(ctx: RuntimeCtx, phase: MemoryUpdatePhase, error: unknown): string {
-		const message = error instanceof Error ? error.message : String(error);
-		if (phase === "observer") this.lastObserverError = message;
-		if (phase === "checkpoint-editor") this.lastCheckpointEditorError = message;
-		if (ctx.hasUI && ctx.ui) ctx.ui.notify(`Observational memory: ${phase} failed: ${message}`, "warning");
-		return message;
-	}
-
-	private launchTrackedTask(
-		ctx: RuntimeCtx,
-		label: string,
-		work: () => Promise<void>,
-		onFinally: (error: string | undefined) => void,
-	): Promise<void> {
-		const hasUI = ctx.hasUI;
-		const ui = ctx.ui;
-		return (async () => {
-			let errorMessage: string | undefined;
-			try {
-				await work();
-			} catch (error) {
-				errorMessage = error instanceof Error ? error.message : String(error);
-				if (hasUI && ui) ui.notify(`Observational memory: ${label} failed: ${errorMessage}`, "warning");
-			} finally {
-				onFinally(errorMessage);
-			}
-		})();
 	}
 }

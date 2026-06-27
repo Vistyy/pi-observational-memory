@@ -70,6 +70,11 @@ Do not advance through an in-flight unmatched tool call.
 Checkpoint updates run after non-empty observer output.
 Do not run checkpoint updates after empty observer output.
 
+### Memory lifecycle
+
+The session memory state machine that coordinates observe, checkpoint update, rerun, status, and compaction preparation.
+It owns lifecycle freshness and execution state; individual Pi hooks are adapters into it.
+
 ### Checkpoint
 
 The primary model-visible session memory artifact.

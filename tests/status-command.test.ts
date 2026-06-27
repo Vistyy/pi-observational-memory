@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { registerStatusCommand } from "../src/commands/status.js";
+import type { LifecycleHealth, MemoryLifecycle } from "../src/memory-update/lifecycle.js";
 import type { Runtime } from "../src/runtime.js";
 import { PI_USAGE_RECORDED } from "../src/usage.js";
 import {
@@ -14,7 +15,7 @@ import {
 } from "./fixtures/session.js";
 import { commandApi, commandCtx, type CommandHandler } from "./fixtures/pi.js";
 
-function setup(args: { entries: TestEntry[]; runtime?: Partial<Runtime> }) {
+function setup(args: { entries: TestEntry[]; runtime?: Partial<Runtime>; health?: Partial<LifecycleHealth> }) {
 	let handler: CommandHandler | undefined;
 	const pi = commandApi((name, command) => {
 		expect(name).toBe("om:status");
@@ -31,18 +32,21 @@ function setup(args: { entries: TestEntry[]; runtime?: Partial<Runtime> }) {
 			observerToolResultLineMaxChars: 300,
 			observerToolOutputPolicies: {},
 		},
-		memoryUpdateInFlight: false,
-		memoryUpdatePhase: undefined,
-		compactHookInFlight: false,
-		lastObserverError: undefined,
-		lastCheckpointEditorError: undefined,
-		lastReflectorError: undefined,
-		lastMaintainerError: undefined,
-		lastMaintainerSkip: undefined,
-		lastRewriteSkip: undefined,
 		...args.runtime,
 	};
-	registerStatusCommand(pi, runtime as Runtime);
+	const lifecycle = {
+		status: vi.fn(() => ({
+			memoryUpdateInFlight: false,
+			memoryUpdatePhase: undefined,
+			compactHookInFlight: false,
+			lastObserverError: undefined,
+			lastCheckpointEditorError: undefined,
+			observeGap: 0,
+			checkpointGap: 0,
+			...args.health,
+		})),
+	} as unknown as MemoryLifecycle;
+	registerStatusCommand(pi, runtime as Runtime, lifecycle);
 	if (!handler) throw new Error("status handler not registered");
 	const notify = vi.fn();
 	const ctx = commandCtx({ cwd: "/tmp/project", ui: { notify }, sessionManager: { getBranch: () => args.entries } });
@@ -50,7 +54,7 @@ function setup(args: { entries: TestEntry[]; runtime?: Partial<Runtime> }) {
 		await handler(commandArgs, ctx);
 		return notify.mock.calls.at(-1)?.[0] as string;
 	};
-	return { run, notify };
+	return { run, notify, lifecycle };
 }
 
 describe("/om:status", () => {
@@ -75,7 +79,7 @@ describe("/om:status", () => {
 			checkpointRecordedEntry("om-check", { checkpoint: check, coversUpToObservationId: obsA.id, observationIds: [obsA.id] }),
 		];
 
-		const output = await setup({ entries }).run();
+		const output = await setup({ entries, health: { checkpointGap: 1 } }).run();
 
 		expect(output).toContain("Current:      check_cccccccccccc");
 		expect(output).toContain(`Coverage:     ${obsA.id}`);
@@ -134,6 +138,8 @@ describe("/om:status", () => {
 			entries: [],
 			runtime: {
 				config: { strategy: "off", observeEveryMessages: 8, observeHardCapRecords: 32 },
+			},
+			health: {
 				memoryUpdateInFlight: true,
 				memoryUpdatePhase: "checkpoint-editor",
 				compactHookInFlight: true,

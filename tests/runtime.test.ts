@@ -51,37 +51,4 @@ describe("Runtime behavior", () => {
 			reason: 'no API key for provider "anthropic"',
 		});
 	});
-
-	it("tracks memory update task state", async () => {
-		const runtime = new Runtime();
-		let release: (() => void) | undefined;
-		const work = new Promise<void>((resolve) => {
-			release = resolve;
-		});
-
-		const promise = runtime.launchMemoryUpdateTask({ hasUI: false }, async () => {
-			runtime.memoryUpdatePhase = "observer";
-			await work;
-		});
-
-		expect(runtime.memoryUpdateInFlight).toBe(true);
-		expect(runtime.memoryUpdatePhase).toBe("observer");
-		release?.();
-		await promise;
-		expect(runtime.memoryUpdateInFlight).toBe(false);
-		expect(runtime.memoryUpdatePhase).toBeUndefined();
-	});
-
-	it("records stage-specific memory update errors", () => {
-		const runtime = new Runtime();
-		const notify = vi.fn();
-
-		expect(runtime.recordMemoryUpdateStageError({ hasUI: true, ui: { notify } }, "observer", new Error("observe failed"))).toBe("observe failed");
-		expect(runtime.recordMemoryUpdateStageError({ hasUI: true, ui: { notify } }, "checkpoint-editor", new Error("checkpoint failed"))).toBe("checkpoint failed");
-
-		expect(runtime.lastObserverError).toBe("observe failed");
-		expect(runtime.lastCheckpointEditorError).toBe("checkpoint failed");
-		expect(notify).toHaveBeenCalledWith("Observational memory: observer failed: observe failed", "warning");
-		expect(notify).toHaveBeenCalledWith("Observational memory: checkpoint-editor failed: checkpoint failed", "warning");
-	});
 });

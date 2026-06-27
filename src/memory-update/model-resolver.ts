@@ -1,6 +1,6 @@
 import { debugLog } from "../debug-log.js";
-import { type MemoryUpdatePhase, type ResolveResult, type Runtime } from "../runtime.js";
-import type { MemoryUpdateCtx, ResolvedModel } from "./types.js";
+import { type ResolveResult, type Runtime } from "../runtime.js";
+import type { MemoryUpdateCtx, MemoryUpdatePhase, ResolvedModel } from "./types.js";
 
 export function makeModelResolver(runtime: Runtime, ctx: MemoryUpdateCtx): (stage: MemoryUpdatePhase) => Promise<ResolvedModel | undefined> {
 	let cached: ResolveResult | undefined;
