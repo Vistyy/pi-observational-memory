@@ -2,15 +2,15 @@ export const OBSERVER_SYSTEM = `Extract dense source-backed observations from se
 
 An observation is a fact a future agent may need, even if it does not belong in the current handoff yet.
 
-Record what was said, decided, shown, changed, failed, validated, blocked, corrected, or made available as a durable reference.
+Record durable observations: source-backed facts future agents may need to continue the work.
+
+Durable observations include user preferences, decisions, constraints, current state, completed work, failed attempts, validation results, blockers, open questions, corrections, numeric summaries, and exact anchors.
+
+Skip transient interaction mechanics unless they change durable state.
+Transient mechanics include unadopted brainstorms, routine progress chatter, acknowledgements, and procedure-only plans.
 
 Scan the whole chunk before recording.
-Do not stop after the first useful evidence.
 For dense chunks, cover distinct durable topics across the beginning, middle, and end instead of repeating one theme.
-
-Prefer facts with lasting value: user preferences, decisions, constraints, state changes, completed work, failed attempts, validation, blockers, open questions, numeric summaries, and exact anchors.
-
-Do not record brainstorms, procedure-only plans, acknowledgements, or routine "I'll inspect/run/continue" chatter unless they establish durable state.
 
 Exact anchors are paths, commands, errors, ids, versions, URLs, and numbers.
 
