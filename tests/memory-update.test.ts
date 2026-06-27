@@ -14,6 +14,7 @@ import { registerMemoryUpdateHook } from "../src/memory-update/scheduler.js";
 import { EMPTY_CHECKPOINT_MARKDOWN } from "../src/memory/checkpoint.js";
 import type { Runtime } from "../src/runtime.js";
 import {
+	OM_CHECKPOINT_COVERAGE_ADVANCED,
 	OM_CHECKPOINT_RECORDED,
 	OM_OBSERVATIONS_RECORDED,
 	checkpointCoverageAdvancedEntry,
@@ -180,6 +181,74 @@ describe("memory update hook", () => {
 		setupResult.fireTurnEnd();
 
 		expect(setupResult.runtime.launchMemoryUpdateTask).not.toHaveBeenCalled();
+	});
+
+	it("advances checkpoint coverage when the editor reports no content change", async () => {
+		mockAgents.runCheckpointEditor.mockResolvedValueOnce({ content: EMPTY_CHECKPOINT_MARKDOWN, reason: "already covered", changed: false });
+		const obs = observation("aaaaaaaaaaaa", { sourceEntryIds: ["raw-1"] });
+		const { fireTurnEnd, runLaunchedWork, getMemoryAppends } = setup({ entries: [
+			rawMessage("raw-1", "aaaaaaaa"),
+			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
+		], observeEveryMessages: 999 });
+
+		fireTurnEnd();
+		await runLaunchedWork();
+
+		expect(getMemoryAppends()).toEqual([
+			{ customType: OM_CHECKPOINT_COVERAGE_ADVANCED, data: { coversUpToObservationId: obs.id, observationIds: [obs.id], reason: "already covered" } },
+		]);
+	});
+
+	it("does not advance checkpoint coverage for invalid editor content", async () => {
+		mockAgents.runCheckpointEditor.mockResolvedValueOnce({ content: "# Invalid", reason: "bad draft", changed: true });
+		const obs = observation("aaaaaaaaaaaa", { sourceEntryIds: ["raw-1"] });
+		const { ctx, fireTurnEnd, runLaunchedWork, getMemoryAppends } = setup({ entries: [
+			rawMessage("raw-1", "aaaaaaaa"),
+			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
+		], observeEveryMessages: 999 });
+
+		fireTurnEnd();
+		await runLaunchedWork();
+
+		expect(getMemoryAppends()).toEqual([]);
+		expect(ctx.ui.notify).toHaveBeenCalledWith("Observational memory: checkpoint editor produced invalid checkpoint", "warning");
+	});
+
+	it("does not advance checkpoint coverage when the editor does not finish", async () => {
+		mockAgents.runCheckpointEditor.mockResolvedValueOnce(undefined);
+		const obs = observation("aaaaaaaaaaaa", { sourceEntryIds: ["raw-1"] });
+		const { ctx, fireTurnEnd, runLaunchedWork, getMemoryAppends } = setup({ entries: [
+			rawMessage("raw-1", "aaaaaaaa"),
+			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
+		], observeEveryMessages: 999 });
+
+		fireTurnEnd();
+		await runLaunchedWork();
+
+		expect(getMemoryAppends()).toEqual([]);
+		expect(ctx.ui.notify).toHaveBeenCalledWith("Observational memory: checkpoint editor did not finish", "warning");
+	});
+
+	it("records changed checkpoint content with a check id", async () => {
+		const content = EMPTY_CHECKPOINT_MARKDOWN.replace("None known.", "Updated by test.");
+		mockAgents.runCheckpointEditor.mockResolvedValueOnce({ content, reason: "new handoff", changed: true });
+		const obs = observation("aaaaaaaaaaaa", { sourceEntryIds: ["raw-1"] });
+		const { fireTurnEnd, runLaunchedWork, getMemoryAppends } = setup({ entries: [
+			rawMessage("raw-1", "aaaaaaaa"),
+			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
+		], observeEveryMessages: 999 });
+
+		fireTurnEnd();
+		await runLaunchedWork();
+
+		expect(getMemoryAppends()).toEqual([
+			{ customType: OM_CHECKPOINT_RECORDED, data: expect.objectContaining({
+				checkpoint: expect.objectContaining({ id: expect.stringMatching(/^check_[0-9a-f]{12}$/), content, contentFormat: "markdown" }),
+				coversUpToObservationId: obs.id,
+				observationIds: [obs.id],
+				mode: "update",
+			}) },
+		]);
 	});
 
 	it("skips initial observer backfill when the existing session is too large", async () => {

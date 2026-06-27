@@ -2,8 +2,9 @@
 
 Session-local memory for Pi.
 
-OM records source-backed observations as durable evidence and renders only current reflections as active memory.
-Use recall when exact evidence is needed.
+OM records source-backed observations as durable evidence.
+It keeps one current Markdown checkpoint as the model-visible handoff.
+Compaction renders that checkpoint into Pi's compacted context.
 
 ## Install locally
 
@@ -28,19 +29,17 @@ pi install git:github.com/Vistyy/pi-observational-memory@v0.1.2
 ```text
 source entries
   -> observer: durable obs_* evidence
-  -> reflector: active ref_* memory from pending observations
-  -> maintainer: small local cleanup of active reflections
-  -> emergency rewrite: rare over-budget fallback
-  -> compaction: observer tail flush + deterministic memory render
-  -> recall: exact evidence and provenance recovery
+  -> checkpoint editor: rolling check_* Markdown checkpoint
+  -> compaction: observer tail flush + checkpoint render
 ```
 
 Key rules:
 
-- Active memory is current `ref_*` reflections only.
-- Observations are hidden from active context but remain recallable.
-- Retired reflections remain recallable by exact id.
-- Compaction does not run reflector, maintainer, or rewrite synchronously.
+- The checkpoint is the primary model-visible memory artifact.
+- Observations are durable source-backed evidence for checkpoint updates.
+- Checkpoint updates advance coverage when observations do not require content changes.
+- Failed or invalid checkpoint drafts do not advance coverage.
+- Compaction may flush unobserved tail entries before rendering the checkpoint.
 - No-tool worker responses must not advance coverage.
 
 ## Configuration
@@ -51,27 +50,24 @@ Configure under `observational-memory`:
 {
   "observational-memory": {
     "strategy": "replacement",
-    "observeEveryMessages": 32,
-    "reflectEveryObservations": 8,
-    "reflectionsPoolMaxTokens": 8000,
+    "observeEveryMessages": 8,
+    "observeHardCapRecords": 32,
     "maxInitialObserveTokens": 100000,
     "observerThinking": "low",
-    "reflectorThinking": "low",
-    "rewriteThinking": "low",
     "debugLog": false
   }
 }
 ```
 
-Tool output excerpt policies are opt-in.
-Add this only if you want OM to record full excerpts for child tools:
+Tool output policies are opt-in.
+Use `omit`, `bounded`, or `full` per tool name:
 
 ```json
 {
   "observational-memory": {
     "observerToolOutputPolicies": {
-      "fork": "full-excerpt",
-      "subagent": "full-excerpt"
+      "fork": "full",
+      "subagent": "full"
     }
   }
 }
@@ -79,35 +75,25 @@ Add this only if you want OM to record full excerpts for child tools:
 
 Strategies:
 
-- `replacement` - replace Pi compaction output with an OM summary.
+- `replacement` - replace Pi compaction output with an OM checkpoint summary.
 - `off` - disable OM workers and OM compaction behavior.
 
+`observeEveryMessages` controls the turn-end observer threshold.
+`observeHardCapRecords` controls the mid-turn emergency observer threshold.
 `maxInitialObserveTokens` prevents expensive backfill when OM starts on an already-large session.
-Old history may be marked covered; future turns are still observed.
-
-`reflectionsPoolMaxTokens` is the hard pressure point for maintainer and emergency rewrite behavior.
+Old history may be marked covered, while future turns are still observed.
+`agentMaxTurns` limits worker agent loops.
+`model` can override the worker model with `{ "provider": "...", "id": "...", "thinking": "..." }`.
 
 ## Commands
 
-- `/om:status` - show memory state.
-- `/om:status full` - include ledger/debug details.
-- `/om:view` - show active context memory.
-- `/om:view recorded` - show recorded observations and reflections.
+- `/om:status` - show checkpoint health and observer coverage.
+- `/om:status full` - include ledger and debug details.
+- `/om:view` - show the current checkpoint content.
+- `/om:view recorded` - show recorded observations and checkpoint events.
 
-## Recall
+## Memory ids
 
-Memory ids look like `obs_...` and `ref_...`.
-Recall is exact-id evidence navigation, not semantic search.
-
-Use recall before relying on memory for exact paths, commands, errors, API names, pass/fail claims, stale/current relationships, or implementation-impacting user constraints.
-
-Modes:
-
-- `evidence` - requested memory, provenance ids, terminal observations, and source entries.
-- `provenance` - evidence plus intermediate reflection contents.
-
-Example:
-
-```ts
-recall({ id: "ref_...", mode: "evidence" })
-```
+Observation ids look like `obs_...`.
+Checkpoint ids look like `check_...`.
+Ledger entry ids are separate from memory ids.
