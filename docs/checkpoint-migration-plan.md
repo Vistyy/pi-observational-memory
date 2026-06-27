@@ -1,5 +1,25 @@
 # Checkpoint migration plan
 
+## Implementation status
+
+The in-repo checkpoint migration is implemented.
+
+The active source path is now:
+
+```text
+session records -> observations -> checkpoint
+```
+
+The old active-reflection source, test, command, and eval paths are absent from this repo.
+
+The removal audit is recorded in `docs/checkpoint-removal-audit.md`.
+
+The checkpoint architecture refactor completion status is recorded in `docs/checkpoint-architecture-refactor-plan.md`.
+
+The pi-fork integration note is external to this package and must be verified in the pi-fork or Pi repository.
+
+Future recall work is tracked separately in `docs/recall-handoff-plan.md` and must not revive the legacy reflection-pool recall path.
+
 ## Goal
 
 Replace OM's active reflection pool with rolling checkpoints as the primary model-visible memory system.
@@ -292,7 +312,11 @@ The updater should compress within the required template without dropping curren
 
 Prune may run asynchronously for health.
 
-Under compaction pressure, prune may run synchronously before catch-up when the checkpoint is invalid or over hard max and the gap cannot fit in retained tail.
+Under compaction pressure, normal checkpoint catch-up runs first.
+
+Prune runs only as recovery when catch-up fails or is blocked because the existing checkpoint is invalid or over hard max.
+
+After prune, normal checkpoint catch-up is retried if pending observations still need coverage.
 
 ## Compacted context
 
@@ -473,6 +497,10 @@ Migration is not complete until a removal audit eliminates or explicitly justifi
 Remove active reflections, reflector, maintainer, rewrite, recall, `om.folded`, reflection-oriented commands, reflection-oriented tests, reflection-oriented docs, and reflection-oriented evals.
 
 Do not leave deprecated or dead compatibility paths after the checkpoint path replaces them.
+
+The in-repo removal audit is complete in `docs/checkpoint-removal-audit.md`.
+
+Historical documentation references are retained only to explain the migration decision.
 
 ## Main risks and accepted mitigations
 

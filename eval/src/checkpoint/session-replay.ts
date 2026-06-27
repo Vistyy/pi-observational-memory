@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { DEFAULTS, STRATEGY } from "../../../src/config.js";
+import { DEFAULTS, STRATEGY, type Config } from "../../../src/config.js";
 import { MemoryLifecycle } from "../../../src/memory-update/lifecycle.js";
 import type { MemoryUpdateCtx } from "../../../src/memory-update/types.js";
 import { Runtime } from "../../../src/runtime.js";
@@ -63,7 +63,7 @@ function createEvalContext(initialEntries: Entry[], resolved: ResolvedEvalModel,
 	};
 }
 
-function createReplayRuntime(maxTurns: number | undefined): Runtime {
+function createReplayRuntime(maxTurns: number | undefined, configOverrides: Partial<Config> | undefined): Runtime {
 	const runtime = new Runtime();
 	runtime.config = {
 		...DEFAULTS,
@@ -74,6 +74,7 @@ function createReplayRuntime(maxTurns: number | undefined): Runtime {
 		agentMaxTurns: maxTurns ?? 8,
 		observerThinking: "low",
 		debugLog: false,
+		...configOverrides,
 	};
 	runtime.configLoaded = true;
 	return runtime;
@@ -81,9 +82,11 @@ function createReplayRuntime(maxTurns: number | undefined): Runtime {
 
 export async function runSessionReplayCase(testCase: SessionReplayEvalCase, resolved: ResolvedEvalModel): Promise<SessionReplayResult> {
 	const allEntries = loadSessionEntries(testCase.sessionPath);
-	const initialEntries = entriesThrough(allEntries, testCase.throughEntryId);
+	const replayEntries = entriesThrough(allEntries, testCase.throughEntryId);
+	const initialEntries = testCase.prepareEntries?.(replayEntries) ?? replayEntries;
+	const initialFolded = foldLedger(initialEntries);
 	const { pi, ctx, getEntries, appendedEntries } = createEvalContext(initialEntries, resolved, testCase.sessionPath);
-	const runtime = createReplayRuntime(testCase.maxTurns);
+	const runtime = createReplayRuntime(testCase.maxTurns, testCase.runtimeConfig);
 	const lifecycle = new MemoryLifecycle(pi, runtime);
 	await lifecycle.runNow("turn_end", ctx);
 	const finalEntries = getEntries();
@@ -98,6 +101,7 @@ export async function runSessionReplayCase(testCase: SessionReplayEvalCase, reso
 		checkpoint: folded.checkpoint,
 		content: folded.checkpoint?.content,
 		checkpointCount: folded.checkpoints.length,
+		initialCheckpointCoverageObservationId: initialFolded.lastCheckpointCoverageObservationId,
 		checkpointModes: checkpointEvents.map((entry) => entry.data.mode),
 		latestCheckpointMode: latestCheckpointEvent?.data.mode,
 		latestObservationIds: latestCheckpointEvent?.data.observationIds ?? [],

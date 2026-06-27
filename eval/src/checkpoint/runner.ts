@@ -91,6 +91,7 @@ async function runReplayCase(testCase: SessionReplayEvalCase, resolved: Resolved
 			appendedEntryTypes: result.appendedEntries.map((entry) => entry.customType ?? entry.type),
 			observationCount: result.observations.length,
 			checkpointCount: result.checkpointCount,
+			initialCheckpointCoverageObservationId: result.initialCheckpointCoverageObservationId,
 			checkpointModes: result.checkpointModes,
 			latestCheckpointMode: result.latestCheckpointMode,
 			latestObservationIds: result.latestObservationIds,

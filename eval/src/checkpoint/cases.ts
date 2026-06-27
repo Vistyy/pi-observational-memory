@@ -1,8 +1,8 @@
 import { EMPTY_CHECKPOINT_MARKDOWN } from "../../../src/memory/checkpoint.js";
-import { OM_CHECKPOINT_RECORDED, OM_OBSERVATIONS_RECORDED } from "../../../src/session-ledger/index.js";
+import { OM_CHECKPOINT_RECORDED, OM_OBSERVATIONS_RECORDED, foldLedger, type Entry } from "../../../src/session-ledger/index.js";
 import { gradeContent, includesAll } from "./grading.js";
 import { DEFAULT_REAL_SESSION_PATH, loadCheckpointUpdateFixture } from "./session-fixture.js";
-import { editorPruneScenario } from "./scenarios.js";
+import { editorPruneScenario, sessionReplayScenario } from "./scenarios.js";
 import type { EvalCase, SessionReplayResult } from "./types.js";
 
 const baseWithObjective = EMPTY_CHECKPOINT_MARKDOWN.replace("None known.", "Continue OM checkpoint migration.");
@@ -73,6 +73,67 @@ function realSessionReplayCase(): EvalCase {
 		},
 		grade: gradeSessionReplay,
 	};
+}
+
+function checkpointPruneReplayCase(): EvalCase {
+	const bloatedCheckpoint = EMPTY_CHECKPOINT_MARKDOWN.replace("None known.", [
+		"Preserve lifecycle prune replay anchor.",
+		"Low-value duplicate detail: replay-noise replay-noise replay-noise replay-noise.",
+		"Low-value duplicate detail: replay-noise replay-noise replay-noise replay-noise.",
+	].join("\n"));
+	return sessionReplayScenario({
+		id: "checkpoint-e2e-prunes-bloated-checkpoint",
+		sessionPath: DEFAULT_REAL_SESSION_PATH,
+		throughEntryId: "74df84d1",
+		maxTurns: 8,
+		runtimeConfig: {
+			observeEveryMessages: 999_999,
+			observeHardCapRecords: 999_999,
+			checkpointPruneTargetTokens: 1,
+		},
+		metadata: {
+			sessionPath: DEFAULT_REAL_SESSION_PATH,
+			throughEntryId: "74df84d1",
+		},
+		prepareEntries: (entries: Entry[]) => {
+			const folded = foldLedger(entries);
+			const coverageId = folded.observations.at(-1)?.id;
+			if (!coverageId) throw new Error("prune replay fixture has no observations to cover");
+			return [...entries, {
+				type: "custom",
+				id: "eval-seeded-bloated-checkpoint",
+				parentId: entries.at(-1)?.id ?? null,
+				timestamp: new Date().toISOString(),
+				customType: OM_CHECKPOINT_RECORDED,
+				data: {
+					mode: "update",
+					checkpoint: {
+						id: "check_aaaaaaaaaaaa",
+						content: bloatedCheckpoint,
+						createdAt: new Date().toISOString(),
+						contentFormat: "markdown",
+					},
+					coversUpToObservationId: coverageId,
+					observationIds: [coverageId],
+				},
+			} as Entry];
+		},
+		grade: (result) => {
+			if (!result?.content) return { passed: false, reason: "session replay prune did not produce a checkpoint", missing: ["checkpoint"] };
+			const missing = includesAll(result.content, ["lifecycle prune replay anchor"]);
+			const incorrect = [] as string[];
+			if (result.latestCheckpointMode !== "prune") missing.push("latest checkpoint mode prune");
+			if (result.latestObservationIds.length !== 0) incorrect.push("prune observation ids not empty");
+			if (result.latestCoversUpToObservationId !== result.initialCheckpointCoverageObservationId) incorrect.push("prune advanced coverage");
+			if (result.content.toLowerCase().includes("replay-noise replay-noise replay-noise replay-noise")) incorrect.push("replay-noise replay-noise replay-noise replay-noise");
+			return {
+				passed: missing.length === 0 && incorrect.length === 0,
+				reason: missing.length === 0 && incorrect.length === 0 ? "session replay prune checks passed" : "session replay prune checks failed",
+				missing,
+				incorrect,
+			};
+		},
+	});
 }
 
 function pruneEvalCases(): EvalCase[] {
@@ -285,5 +346,6 @@ Keep checkpoint concise.
 		...pruneEvalCases(),
 		realSessionWideContextCase(),
 		realSessionReplayCase(),
+		checkpointPruneReplayCase(),
 	];
 }

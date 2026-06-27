@@ -1,4 +1,6 @@
 import type { CheckpointEditorResult } from "../../../src/agents/checkpoint-editor/agent.js";
+import type { Config } from "../../../src/config.js";
+import type { Entry } from "../../../src/session-ledger/index.js";
 import type { EditorEvalCase, Grade, SessionReplayEvalCase, SessionReplayResult } from "./types.js";
 
 export function editorUpdateScenario(args: {
@@ -45,6 +47,8 @@ export function sessionReplayScenario(args: {
 	sessionPath: string;
 	throughEntryId: string;
 	maxTurns?: number;
+	runtimeConfig?: Partial<Config>;
+	prepareEntries?: (entries: Entry[]) => Entry[];
 	metadata?: Record<string, unknown>;
 	grade: (result: SessionReplayResult | undefined) => Grade;
 }): SessionReplayEvalCase {
@@ -54,6 +58,8 @@ export function sessionReplayScenario(args: {
 		sessionPath: args.sessionPath,
 		throughEntryId: args.throughEntryId,
 		maxTurns: args.maxTurns,
+		runtimeConfig: args.runtimeConfig,
+		prepareEntries: args.prepareEntries,
 		metadata: args.metadata,
 		grade: args.grade,
 	};

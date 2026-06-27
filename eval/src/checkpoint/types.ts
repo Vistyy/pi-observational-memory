@@ -1,5 +1,6 @@
 import type { MemoryAgentUsage } from "../../../src/agents/common.js";
 import type { CheckpointEditorResult } from "../../../src/agents/checkpoint-editor/agent.js";
+import type { Config } from "../../../src/config.js";
 import type { Checkpoint, Entry, Observation } from "../../../src/session-ledger/index.js";
 
 export type CheckpointEvalPurpose = "update" | "prune";
@@ -30,6 +31,7 @@ export type SessionReplayResult = {
 	checkpoint?: Checkpoint;
 	content?: string;
 	checkpointCount: number;
+	initialCheckpointCoverageObservationId?: string;
 	checkpointModes: Array<"update" | "prune">;
 	latestCheckpointMode?: "update" | "prune";
 	latestObservationIds: string[];
@@ -43,6 +45,8 @@ export type SessionReplayEvalCase = {
 	sessionPath: string;
 	throughEntryId: string;
 	maxTurns?: number;
+	runtimeConfig?: Partial<Config>;
+	prepareEntries?: (entries: Entry[]) => Entry[];
 	metadata?: Record<string, unknown>;
 	grade: (result: SessionReplayResult | undefined) => Grade;
 };
@@ -70,6 +74,7 @@ export type EvalRecord = {
 	appendedEntryTypes?: string[];
 	observationCount?: number;
 	checkpointCount?: number;
+	initialCheckpointCoverageObservationId?: string;
 	checkpointModes?: Array<"update" | "prune">;
 	latestCheckpointMode?: "update" | "prune";
 	latestObservationIds?: string[];

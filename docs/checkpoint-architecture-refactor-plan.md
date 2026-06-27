@@ -11,6 +11,17 @@ Accepted decisions:
 - Compaction pressure tries normal checkpoint catch-up first.
 - Compaction pressure runs prune only as recovery when catch-up fails or is blocked by an invalid or over-hard-max checkpoint.
 
+Implementation status:
+
+- Phase 1 is implemented in `src/memory/checkpoint-format.ts` and covered by `tests/checkpoint-editor-prompts.test.ts`.
+- Phase 2 is implemented in `src/agents/checkpoint-editor/prompts.ts` and `src/agents/checkpoint-editor/agent.ts`.
+- Phase 3 is implemented in `eval/src/checkpoint/scenarios.ts`, `eval/src/checkpoint/grading.ts`, and `eval/src/cli/checkpoint-evals.ts`.
+- Phase 4 is implemented in `src/session-ledger/memory-state.ts` and covered by `tests/session-ledger-memory-state.test.ts`.
+- Phase 5 is implemented in `src/memory-update/observer-recording.ts` and covered by `tests/observer-recording.test.ts`.
+- Phase 6 is implemented in `src/memory-update/checkpoint-lifecycle.ts` and covered by `tests/checkpoint-lifecycle.test.ts`.
+- Phase 7 is implemented with token-budget prune triggers, status output, lifecycle tests, and the `checkpoint-e2e-prunes-bloated-checkpoint` eval.
+- The previous `src/memory-update/checkpoint-stage.ts` path has been removed.
+
 ## Goals
 
 Make `CheckpointEditor` behavior easier to understand and verify.
@@ -89,7 +100,7 @@ Files:
 
 Actions:
 
-- Add scenario builders for editor update, editor prune, session replay update, and later session replay prune.
+- Add scenario builders for editor update, editor prune, session replay update, and session replay prune.
 - Add grading helpers for anchors, forbidden terms, no new facts, shortened output, unchanged output, and durable event shape.
 - Add `--fail-fast` to the eval CLI.
 - Keep `--repeat` as the stress path for now.
@@ -277,7 +288,7 @@ Tests:
 
 Evals:
 
-- Add session replay prune case after lifecycle prune exists.
+- Add `checkpoint-e2e-prunes-bloated-checkpoint` after lifecycle prune exists.
 - Assert appended checkpoint event has `mode: "prune"`.
 - Assert `observationIds` is empty.
 - Assert coverage did not advance.
