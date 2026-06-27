@@ -102,7 +102,9 @@ Add two diagnostic evals:
 
 The synthetic eval should use a controlled 12k to 16k token checkpoint.
 
-It should include repeated stale bloat, duplicate detail, and handoff-critical anchors that must survive.
+It should be mixed.
+
+It should include duplicate junk, many similar but not identical facts, repeated stale bloat, and handoff-critical anchors that must survive.
 
 The real-latest eval should load the latest checkpoint from the local session fixture:
 
