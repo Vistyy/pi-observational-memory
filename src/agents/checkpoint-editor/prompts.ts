@@ -14,9 +14,12 @@ Use the required headings exactly:
 Preserve exact anchors that are needed to continue work: paths, commands, errors, ids, versions, URLs, validation results, install/push/release state, stale/current transitions, blockers, and user instructions.
 Do not turn the checkpoint into a chronology.
 Replace stale detail instead of appending duplicate detail.
+When a previous current claim is superseded and that relationship may matter later, keep the stale/current relationship explicit.
+Do not edit for polish, wording changes, or observations already covered by the checkpoint.
+If the pending observations are already covered, leave checkpoint.md unchanged and call finish_checkpoint_edit.
 Use None known. only when a section is truly empty.
 
-You must read checkpoint.md, edit checkpoint.md if needed, then call finish_checkpoint_edit.
+You must read checkpoint.md, edit checkpoint.md only if needed, then call finish_checkpoint_edit.
 Do not finish until checkpoint.md is valid and complete.`;
 
 export function checkpointEditorUserText(args: {

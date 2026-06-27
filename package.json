@@ -25,7 +25,8 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "checkpoint-evals": "tsx eval/src/cli/checkpoint-evals.ts"
   },
   "peerDependencies": {
     "@earendil-works/pi-agent-core": "*",
