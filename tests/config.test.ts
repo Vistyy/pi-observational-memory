@@ -9,7 +9,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
 	getAgentDir: () => mock.agentDir,
 }));
 
-import { DEFAULTS, loadConfig, STRATEGY } from "../src/config.js";
+import { DEFAULTS, configuredModelForAgent, loadConfig, STRATEGY, thinkingForAgent } from "../src/config.js";
 
 function writeJson(path: string, value: unknown) {
 	mkdirSync(join(path, ".."), { recursive: true });
@@ -45,7 +45,10 @@ describe("config", () => {
 			observerToolResultLineMaxChars: 300,
 			observerToolOutputPolicies: {},
 			agentMaxTurns: 4,
+			checkpointPruneTargetTokens: 4000,
+			checkpointPruneHardMaxTokens: 8000,
 			observerThinking: "low",
+			checkpointEditorThinking: "low",
 			debugLog: false,
 		});
 		expect(loadConfig(cwd)).toEqual(DEFAULTS);
@@ -63,8 +66,13 @@ describe("config", () => {
 				observerToolResultLineMaxChars: 120,
 				observerToolOutputPolicies: { fork: "bounded", web_fetch: "bounded", bad: "nope" },
 				agentMaxTurns: 5,
+				checkpointPruneTargetTokens: 3000,
+				checkpointPruneHardMaxTokens: 6000,
 				model: { provider: "anthropic", id: "global", thinking: "medium" },
+				observerModel: { provider: "anthropic", id: "observer", thinking: "minimal" },
+				checkpointEditorModel: { provider: "anthropic", id: "checkpoint", thinking: "high" },
 				observerThinking: "low",
+				checkpointEditorThinking: "medium",
 				debugLog: true,
 			},
 		});
@@ -87,10 +95,31 @@ describe("config", () => {
 			observerToolResultLineMaxChars: 120,
 			observerToolOutputPolicies: { fork: "full", web_fetch: "bounded", custom_tool: "omit" },
 			agentMaxTurns: 5,
+			checkpointPruneTargetTokens: 3000,
+			checkpointPruneHardMaxTokens: 6000,
 			model: { provider: "openai", id: "project", thinking: "low" },
+			observerModel: { provider: "anthropic", id: "observer", thinking: "minimal" },
+			checkpointEditorModel: { provider: "anthropic", id: "checkpoint", thinking: "high" },
 			observerThinking: "low",
+			checkpointEditorThinking: "medium",
 			debugLog: true,
 		});
+	});
+
+	it("resolves per-agent model and thinking fallbacks", () => {
+		const config = {
+			...DEFAULTS,
+			model: { provider: "anthropic", id: "fallback", thinking: "medium" as const },
+			observerModel: { provider: "openai", id: "observer", thinking: "minimal" as const },
+			checkpointEditorModel: { provider: "openai", id: "checkpoint", thinking: "high" as const },
+			observerThinking: "low" as const,
+			checkpointEditorThinking: "xhigh" as const,
+		};
+
+		expect(configuredModelForAgent(config, "observer")).toEqual(config.observerModel);
+		expect(configuredModelForAgent(config, "checkpoint-editor")).toEqual(config.checkpointEditorModel);
+		expect(thinkingForAgent(config, "observer")).toBe("low");
+		expect(thinkingForAgent(config, "checkpoint-editor")).toBe("xhigh");
 	});
 
 	it("ignores invalid values", () => {
@@ -105,8 +134,13 @@ describe("config", () => {
 				observerToolResultLineMaxChars: null,
 				observerToolOutputPolicies: { fork: "giant", "": "bounded" },
 				agentMaxTurns: null,
+				checkpointPruneTargetTokens: 0,
+				checkpointPruneHardMaxTokens: "many",
 				model: { provider: "anthropic", id: "", thinking: "huge" },
+				observerModel: { provider: "", id: "observer", thinking: "low" },
+				checkpointEditorModel: { provider: "anthropic", id: "", thinking: "low" },
 				observerThinking: "huge",
+				checkpointEditorThinking: "giant",
 				debugLog: "true",
 			},
 		});

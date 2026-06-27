@@ -14,6 +14,7 @@ type Args = {
 	repeat: number;
 	outDir?: string;
 	writeArtifacts: boolean;
+	failFast: boolean;
 };
 
 function timestampForPath(date = new Date()): string {
@@ -28,6 +29,7 @@ function parseArgs(argv: string[]): Args {
 	let repeat = 1;
 	let outDir: string | undefined;
 	let shouldWriteArtifacts = true;
+	let failFast = false;
 	for (let i = 0; i < argv.length; i++) {
 		const arg = argv[i];
 		if (arg === "--") continue;
@@ -44,16 +46,17 @@ function parseArgs(argv: string[]): Args {
 		} else if (arg === "--out") {
 			outDir = argv[++i];
 			if (!outDir) throw new Error("--out requires a path");
-		} else if (arg === "--no-artifacts") shouldWriteArtifacts = false;
+		} else if (arg === "--fail-fast") failFast = true;
+		else if (arg === "--no-artifacts") shouldWriteArtifacts = false;
 		else if (arg === "--json") json = true;
 		else if (arg === "--help" || arg === "-h") {
-			console.log("Usage: pnpm checkpoint-evals [--model provider/id] [--thinking low] [--case id[,id]] [--repeat N] [--out dir] [--no-artifacts] [--json]");
+			console.log("Usage: pnpm checkpoint-evals [--model provider/id] [--thinking low] [--case id[,id]] [--repeat N] [--out dir] [--fail-fast] [--no-artifacts] [--json]");
 			process.exit(0);
 		} else {
 			throw new Error(`unknown argument: ${arg}`);
 		}
 	}
-	return { model, thinking, caseIds, json, repeat, outDir, writeArtifacts: shouldWriteArtifacts };
+	return { model, thinking, caseIds, json, repeat, outDir, writeArtifacts: shouldWriteArtifacts, failFast };
 }
 
 async function main(): Promise<void> {
@@ -62,7 +65,7 @@ async function main(): Promise<void> {
 	const cases = loadCheckpointEvalCases();
 	const selected = args.caseIds ? cases.filter((testCase) => args.caseIds?.has(testCase.id)) : cases;
 	if (selected.length === 0) throw new Error("no checkpoint eval cases selected");
-	const records = await runCases({ cases: selected, model: args.model, thinking: args.thinking, repeat: args.repeat });
+	const records = await runCases({ cases: selected, model: args.model, thinking: args.thinking, repeat: args.repeat, failFast: args.failFast });
 	const summary = summarizeRecords({ records, startedAt, model: args.model, thinking: args.thinking, repeat: args.repeat });
 	if (args.writeArtifacts) {
 		const outDir = args.outDir ?? join("runs", "checkpoint-evals", timestampForPath(new Date(startedAt)));

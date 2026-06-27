@@ -1,4 +1,4 @@
-import { type Config, DEFAULTS, loadConfig } from "./config.js";
+import { type Config, type ConfiguredModel, DEFAULTS, loadConfig } from "./config.js";
 
 export type ResolveResult =
 	| { ok: true; model: unknown; apiKey: string; headers?: Record<string, string> }
@@ -25,15 +25,15 @@ export class Runtime {
 		this.configLoaded = true;
 	}
 
-	async resolveModel(ctx: RuntimeCtx & { model: unknown; modelRegistry: any }): Promise<ResolveResult> {
+	async resolveModel(ctx: RuntimeCtx & { model: unknown; modelRegistry: any }, configuredModel: ConfiguredModel | undefined = this.config.model): Promise<ResolveResult> {
 		let model = ctx.model;
-		if (this.config.model) {
-			const configured = ctx.modelRegistry.find(this.config.model.provider, this.config.model.id);
+		if (configuredModel) {
+			const configured = ctx.modelRegistry.find(configuredModel.provider, configuredModel.id);
 			if (configured) {
 				model = configured;
 			} else if (ctx.hasUI && ctx.ui) {
 				ctx.ui.notify(
-					`Observational memory: configured model ${this.config.model.provider}/${this.config.model.id} not found, using session model`,
+					`Observational memory: configured model ${configuredModel.provider}/${configuredModel.id} not found, using session model`,
 					"warning",
 				);
 			}

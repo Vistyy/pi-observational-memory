@@ -30,6 +30,10 @@ export type SessionReplayResult = {
 	checkpoint?: Checkpoint;
 	content?: string;
 	checkpointCount: number;
+	checkpointModes: Array<"update" | "prune">;
+	latestCheckpointMode?: "update" | "prune";
+	latestObservationIds: string[];
+	latestCoversUpToObservationId?: string;
 	uncheckpointedObservationCount: number;
 };
 
@@ -59,11 +63,17 @@ export type EvalRecord = {
 	durationMs: number;
 	error?: string;
 	metadata?: Record<string, unknown>;
+	initialContent?: string;
+	observationsText?: string;
 	initialEntryCount?: number;
 	finalEntryCount?: number;
 	appendedEntryTypes?: string[];
 	observationCount?: number;
 	checkpointCount?: number;
+	checkpointModes?: Array<"update" | "prune">;
+	latestCheckpointMode?: "update" | "prune";
+	latestObservationIds?: string[];
+	latestCoversUpToObservationId?: string;
 	uncheckpointedObservationCount?: number;
 };
 

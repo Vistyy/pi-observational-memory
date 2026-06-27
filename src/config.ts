@@ -17,6 +17,8 @@ export type MemoryStrategy = (typeof STRATEGY)[keyof typeof STRATEGY];
 
 export type ObserverToolOutputPolicy = "omit" | "bounded" | "full";
 
+export type MemoryAgentKind = "observer" | "checkpoint-editor";
+
 export interface Config {
 	strategy: MemoryStrategy;
 	observeEveryMessages: number;
@@ -27,8 +29,13 @@ export interface Config {
 	observerToolResultLineMaxChars: number;
 	observerToolOutputPolicies: Record<string, ObserverToolOutputPolicy>;
 	agentMaxTurns: number;
+	checkpointPruneTargetTokens: number;
+	checkpointPruneHardMaxTokens: number;
 	model?: ConfiguredModel;
+	observerModel?: ConfiguredModel;
+	checkpointEditorModel?: ConfiguredModel;
 	observerThinking?: ModelThinkingLevel;
+	checkpointEditorThinking?: ModelThinkingLevel;
 	debugLog: boolean;
 }
 
@@ -42,7 +49,10 @@ export const DEFAULTS: Config = {
 	observerToolResultLineMaxChars: 300,
 	observerToolOutputPolicies: {},
 	agentMaxTurns: 4,
+	checkpointPruneTargetTokens: 4_000,
+	checkpointPruneHardMaxTokens: 8_000,
 	observerThinking: "low",
+	checkpointEditorThinking: "low",
 	debugLog: false,
 };
 
@@ -103,6 +113,8 @@ function normalizeSettingsConfig(value: Record<string, unknown>): Partial<Config
 		"observerToolResultErrorMaxLines",
 		"observerToolResultLineMaxChars",
 		"agentMaxTurns",
+		"checkpointPruneTargetTokens",
+		"checkpointPruneHardMaxTokens",
 	] as const;
 	for (const key of numberKeys) {
 		const normalizedValue = positiveIntegerOrUndefined(value[key]);
@@ -111,8 +123,13 @@ function normalizeSettingsConfig(value: Record<string, unknown>): Partial<Config
 	if (isMemoryStrategy(value.strategy)) normalized.strategy = value.strategy;
 	if (typeof value.debugLog === "boolean") normalized.debugLog = value.debugLog;
 	if (isThinkingLevel(value.observerThinking)) normalized.observerThinking = value.observerThinking;
+	if (isThinkingLevel(value.checkpointEditorThinking)) normalized.checkpointEditorThinking = value.checkpointEditorThinking;
 	const model = normalizeModel(value.model);
 	if (model) normalized.model = model;
+	const observerModel = normalizeModel(value.observerModel);
+	if (observerModel) normalized.observerModel = observerModel;
+	const checkpointEditorModel = normalizeModel(value.checkpointEditorModel);
+	if (checkpointEditorModel) normalized.checkpointEditorModel = checkpointEditorModel;
 	const observerToolOutputPolicies = normalizeObserverToolOutputPolicies(value.observerToolOutputPolicies);
 	if (observerToolOutputPolicies) normalized.observerToolOutputPolicies = observerToolOutputPolicies;
 	return normalized;
@@ -127,6 +144,16 @@ function readNamespacedConfig(path: string): Partial<Config> {
 	} catch {
 		return {};
 	}
+}
+
+export function configuredModelForAgent(config: Config, agent: MemoryAgentKind): ConfiguredModel | undefined {
+	if (agent === "observer") return config.observerModel ?? config.model;
+	return config.checkpointEditorModel ?? config.model;
+}
+
+export function thinkingForAgent(config: Config, agent: MemoryAgentKind): ModelThinkingLevel {
+	if (agent === "observer") return config.observerThinking ?? config.observerModel?.thinking ?? config.model?.thinking ?? "low";
+	return config.checkpointEditorThinking ?? config.checkpointEditorModel?.thinking ?? config.model?.thinking ?? "low";
 }
 
 export function loadConfig(cwd: string): Config {

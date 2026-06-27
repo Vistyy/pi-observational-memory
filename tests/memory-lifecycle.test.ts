@@ -16,7 +16,9 @@ import {
 	OM_CHECKPOINT_COVERAGE_ADVANCED,
 	OM_CHECKPOINT_RECORDED,
 	OM_OBSERVATIONS_RECORDED,
+	checkpoint,
 	checkpointCoverageAdvancedEntry,
+	checkpointRecordedEntry,
 	observation,
 	observationsRecordedEntry,
 	rawMessage,
@@ -55,6 +57,8 @@ function setup(args: {
 	observeEveryMessages?: number;
 	observeHardCapRecords?: number;
 	maxInitialObserveTokens?: number;
+	checkpointPruneTargetTokens?: number;
+	checkpointPruneHardMaxTokens?: number;
 	strategy?: "replacement" | "off";
 }) {
 	let entries = [...args.entries];
@@ -76,8 +80,11 @@ function setup(args: {
 			observerToolResultLineMaxChars: 300,
 			observerToolOutputPolicies: {},
 			agentMaxTurns: 9,
+			checkpointPruneTargetTokens: args.checkpointPruneTargetTokens ?? 4_000,
+			checkpointPruneHardMaxTokens: args.checkpointPruneHardMaxTokens ?? 8_000,
 			model: { provider: "anthropic", id: "memory", thinking: "minimal" },
 			observerThinking: "minimal",
+			checkpointEditorThinking: "medium",
 		},
 		resolveFailureNotified: false,
 		ensureConfig: vi.fn(),
@@ -161,7 +168,7 @@ describe("MemoryLifecycle", () => {
 		await setupResult.lifecycle.runNow("turn_end", setupResult.ctx as never);
 
 		expect(mockAgents.runObserver).toHaveBeenCalledWith(expect.objectContaining({ allowedSourceEntryIds: ["raw-1"], maxTurns: 9, thinkingLevel: "minimal" }));
-		expect(mockAgents.runCheckpointEditor).toHaveBeenCalledWith(expect.objectContaining({ observationsText: expect.stringContaining(obs.id), purpose: "update" }));
+		expect(mockAgents.runCheckpointEditor).toHaveBeenCalledWith(expect.objectContaining({ observationsText: expect.stringContaining(obs.id), purpose: "update", thinkingLevel: "medium" }));
 		expect(setupResult.getMemoryAppends()).toEqual([
 			{ customType: OM_OBSERVATIONS_RECORDED, data: { observations: [obs], coversUpToId: "raw-1" } },
 			expect.objectContaining({ customType: OM_CHECKPOINT_RECORDED }),
@@ -254,6 +261,68 @@ describe("MemoryLifecycle", () => {
 				mode: "update",
 			}) },
 		]);
+	});
+
+	it("runs health prune when the checkpoint exceeds the target token budget", async () => {
+		const obs = observation("aaaaaaaaaaaa", { sourceEntryIds: ["raw-1"] });
+		const check = checkpoint("cccccccccccc", {
+			content: EMPTY_CHECKPOINT_MARKDOWN.replace("None known.", `${"large checkpoint detail ".repeat(80)}.`),
+		});
+		const setupResult = setup({ entries: [
+			rawMessage("raw-1", "aaaaaaaa"),
+			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
+			checkpointRecordedEntry("om-check", { checkpoint: check, coversUpToObservationId: obs.id, observationIds: [obs.id] }),
+		], observeEveryMessages: 999, checkpointPruneTargetTokens: 1 });
+
+		await setupResult.lifecycle.runNow("turn_end", setupResult.ctx as never);
+
+		expect(mockAgents.runCheckpointEditor).toHaveBeenCalledWith(expect.objectContaining({ purpose: "prune", observationsText: "", initialContent: check.content }));
+		expect(setupResult.getMemoryAppends()).toEqual([
+			{ customType: OM_CHECKPOINT_RECORDED, data: expect.objectContaining({
+				mode: "prune",
+				coversUpToObservationId: obs.id,
+				observationIds: [],
+			}) },
+		]);
+	});
+
+	it("does not emit a ledger event for unchanged prune", async () => {
+		const obs = observation("aaaaaaaaaaaa", { sourceEntryIds: ["raw-1"] });
+		const check = checkpoint("cccccccccccc", {
+			content: EMPTY_CHECKPOINT_MARKDOWN.replace("None known.", `${"large checkpoint detail ".repeat(80)}.`),
+		});
+		mockAgents.runCheckpointEditor.mockResolvedValueOnce({ content: check.content, reason: "already concise", changed: false });
+		const setupResult = setup({ entries: [
+			rawMessage("raw-1", "aaaaaaaa"),
+			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
+			checkpointRecordedEntry("om-check", { checkpoint: check, coversUpToObservationId: obs.id, observationIds: [obs.id] }),
+		], observeEveryMessages: 999, checkpointPruneTargetTokens: 1 });
+
+		await setupResult.lifecycle.runNow("turn_end", setupResult.ctx as never);
+
+		expect(mockAgents.runCheckpointEditor).toHaveBeenCalledWith(expect.objectContaining({ purpose: "prune" }));
+		expect(setupResult.getMemoryAppends()).toEqual([]);
+	});
+
+	it("uses compaction pressure prune only after checkpoint catch-up still leaves an oversized checkpoint", async () => {
+		const obs = observation("bbbbbbbbbbbb", { sourceEntryIds: ["raw-1"] });
+		const oversizedAfterUpdate = EMPTY_CHECKPOINT_MARKDOWN.replace("None known.", `${"oversized detail ".repeat(80)}.`);
+		const compactAfterPrune = EMPTY_CHECKPOINT_MARKDOWN.replace("None known.", "Compact checkpoint.");
+		mockAgents.runCheckpointEditor
+			.mockResolvedValueOnce({ content: oversizedAfterUpdate, reason: "updated", changed: true })
+			.mockResolvedValueOnce({ content: compactAfterPrune, reason: "pruned", changed: true });
+		const setupResult = setup({ entries: [
+			rawMessage("raw-1", "aaaa"),
+			observationsRecordedEntry("om-obs", { observations: [obs], coversUpToId: "raw-1" }),
+			rawMessage("raw-2", "bbbb"),
+		], observeEveryMessages: 999, checkpointPruneHardMaxTokens: 100 });
+
+		const result = await setupResult.lifecycle.prepareForCompaction(setupResult.ctx as never, { firstKeptEntryId: "raw-2" });
+
+		expect(result).toEqual(expect.objectContaining({ kind: "ready" }));
+		expect(mockAgents.runCheckpointEditor).toHaveBeenNthCalledWith(1, expect.objectContaining({ purpose: "update" }));
+		expect(mockAgents.runCheckpointEditor).toHaveBeenNthCalledWith(2, expect.objectContaining({ purpose: "prune", observationsText: "" }));
+		expect(setupResult.getMemoryAppends().map((entry) => entry.customType)).toEqual([OM_CHECKPOINT_RECORDED, OM_CHECKPOINT_RECORDED]);
 	});
 
 	it("skips initial observer backfill when the existing session is too large", async () => {

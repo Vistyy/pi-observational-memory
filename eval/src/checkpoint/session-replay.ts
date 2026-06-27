@@ -3,7 +3,7 @@ import { DEFAULTS, STRATEGY } from "../../../src/config.js";
 import { MemoryLifecycle } from "../../../src/memory-update/lifecycle.js";
 import type { MemoryUpdateCtx } from "../../../src/memory-update/types.js";
 import { Runtime } from "../../../src/runtime.js";
-import { foldLedger, type Entry } from "../../../src/session-ledger/index.js";
+import { foldLedger, isCheckpointRecordedEntry, type Entry } from "../../../src/session-ledger/index.js";
 import type { ResolvedEvalModel } from "./runner.js";
 import { loadSessionEntries } from "./session-fixture.js";
 import type { SessionReplayEvalCase, SessionReplayResult } from "./types.js";
@@ -88,6 +88,8 @@ export async function runSessionReplayCase(testCase: SessionReplayEvalCase, reso
 	await lifecycle.runNow("turn_end", ctx);
 	const finalEntries = getEntries();
 	const folded = foldLedger(finalEntries);
+	const checkpointEvents = appendedEntries.filter(isCheckpointRecordedEntry);
+	const latestCheckpointEvent = checkpointEvents.at(-1);
 	return {
 		initialEntryCount: initialEntries.length,
 		finalEntryCount: finalEntries.length,
@@ -96,6 +98,10 @@ export async function runSessionReplayCase(testCase: SessionReplayEvalCase, reso
 		checkpoint: folded.checkpoint,
 		content: folded.checkpoint?.content,
 		checkpointCount: folded.checkpoints.length,
+		checkpointModes: checkpointEvents.map((entry) => entry.data.mode),
+		latestCheckpointMode: latestCheckpointEvent?.data.mode,
+		latestObservationIds: latestCheckpointEvent?.data.observationIds ?? [],
+		latestCoversUpToObservationId: latestCheckpointEvent?.data.coversUpToObservationId,
 		uncheckpointedObservationCount: folded.uncheckpointedObservations.length,
 	};
 }

@@ -3,7 +3,10 @@ export const OM_CHECKPOINT_RECORDED = "om.checkpoint.recorded";
 export const OM_CHECKPOINT_COVERAGE_ADVANCED = "om.checkpoint.coverage_advanced";
 export const OM_CHECKPOINT = "om.checkpoint";
 
+import { isValidCheckpointMarkdown } from "../memory/checkpoint-format.js";
 import { checkpointId, isCheckpointId, isLegacyMemoryId, isObservationId, observationId } from "../memory/ids.js";
+
+export { isValidCheckpointMarkdown } from "../memory/checkpoint-format.js";
 
 export type Entry = {
 	type: string;
@@ -107,19 +110,6 @@ export function normalizeObservation(value: unknown): Observation | undefined {
 
 export function isObservation(value: unknown): value is Observation {
 	return !!normalizeObservation(value);
-}
-
-const REQUIRED_CHECKPOINT_HEADINGS = [
-	"# Checkpoint",
-	"## Current objective",
-	"## Progress and decisions",
-	"## Important context",
-	"## Remaining work",
-	"## References and anchors",
-] as const;
-
-export function isValidCheckpointMarkdown(content: string): boolean {
-	return content.trim().length > 0 && REQUIRED_CHECKPOINT_HEADINGS.every((heading) => content.includes(heading));
 }
 
 export function normalizeCheckpoint(value: unknown): Checkpoint | undefined {

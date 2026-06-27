@@ -1,7 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { estimateStringTokens } from "../memory/token-estimate.js";
 import type { MemoryLifecycle } from "../memory-update/lifecycle.js";
 import type { Runtime } from "../runtime.js";
-import { foldLedger, type Entry } from "../session-ledger/index.js";
+import { buildSessionMemoryState, type Entry } from "../session-ledger/index.js";
 import { PI_USAGE_RECORDED, normalizeUsage, type UsageTotals } from "../usage.js";
 
 type UsageSummary = {
@@ -65,8 +66,10 @@ export async function runStatusCommand(args: unknown, ctx: any, runtime: Runtime
 	}
 
 	const entries = ctx.sessionManager.getBranch() as Entry[];
-	const folded = foldLedger(entries);
+	const state = buildSessionMemoryState(entries);
+	const folded = state.folded;
 	const checkpoint = folded.checkpoint;
+	const checkpointTokens = checkpoint ? estimateStringTokens(checkpoint.content) : 0;
 	const health = lifecycle.status(entries);
 	const lines = [
 		"── Checkpoint ──",
@@ -77,6 +80,7 @@ export async function runStatusCommand(args: unknown, ctx: any, runtime: Runtime
 		"── Next work ──",
 		`Observe gap:    ${health.observeGap.toLocaleString()} records`,
 		`Checkpoint gap: ${health.checkpointGap.toLocaleString()} observations`,
+		`Prune due:      ${health.checkpointPruneDue ? "yes" : "no"}`,
 	];
 
 	if (mode === "full") {
@@ -86,6 +90,7 @@ export async function runStatusCommand(args: unknown, ctx: any, runtime: Runtime
 			`Strategy: ${runtime.config.strategy}`,
 			`Ledger observations: ${folded.observations.length.toLocaleString()} recorded`,
 			`Checkpoint versions: ${folded.checkpoints.length.toLocaleString()} recorded`,
+			`Checkpoint tokens: ${checkpoint ? `~${checkpointTokens.toLocaleString()} / ${runtime.config.checkpointPruneTargetTokens.toLocaleString()} target / ${runtime.config.checkpointPruneHardMaxTokens.toLocaleString()} hard max` : "none"}`,
 		);
 		const usage = summarizeUsage(entries);
 		if (usage.total.totalTokens > 0 || usage.total.cost > 0) {

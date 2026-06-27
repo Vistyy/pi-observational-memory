@@ -2,6 +2,7 @@ import { EMPTY_CHECKPOINT_MARKDOWN } from "../../../src/memory/checkpoint.js";
 import { OM_CHECKPOINT_RECORDED, OM_OBSERVATIONS_RECORDED } from "../../../src/session-ledger/index.js";
 import { gradeContent, includesAll } from "./grading.js";
 import { DEFAULT_REAL_SESSION_PATH, loadCheckpointUpdateFixture } from "./session-fixture.js";
+import { editorPruneScenario } from "./scenarios.js";
 import type { EvalCase, SessionReplayResult } from "./types.js";
 
 const baseWithObjective = EMPTY_CHECKPOINT_MARKDOWN.replace("None known.", "Continue OM checkpoint migration.");
@@ -72,6 +73,135 @@ function realSessionReplayCase(): EvalCase {
 		},
 		grade: gradeSessionReplay,
 	};
+}
+
+function pruneEvalCases(): EvalCase[] {
+	const activeDecisions = `# Checkpoint
+
+## Current objective
+
+Continue checkpoint lifecycle refactor.
+
+## Progress and decisions
+
+- Accepted: prune triggers use token budgets only.
+- Accepted: unchanged prune emits no ledger event.
+- Accepted: compaction tries normal checkpoint catch-up first.
+- Low-value duplicate detail: remove-this remove-this remove-this remove-this.
+- Low-value duplicate detail: remove-this remove-this remove-this remove-this.
+
+## Important context
+
+Preserve exact anchor \`src/memory-update/checkpoint-lifecycle.ts\`.
+Preserve exact command \`pnpm typecheck && pnpm test -- --reporter=dot\`.
+
+## Remaining work
+
+Implement first-class prune lifecycle semantics.
+
+## References and anchors
+
+- \`src/memory-update/checkpoint-lifecycle.ts\`
+- \`checkpointPruneTargetTokens\`
+`;
+	const remainingWork = `# Checkpoint
+
+## Current objective
+
+Finish OM checkpoint memory cleanup.
+
+## Progress and decisions
+
+The prompt split is in progress.
+Noise: earlier notes repeated repeated repeated repeated.
+Noise: earlier notes repeated repeated repeated repeated.
+
+## Important context
+
+Keep deterministic mechanics in tests and model behavior in evals.
+
+## Remaining work
+
+- Add memory state module.
+- Add observer recording module.
+- Add checkpoint lifecycle module.
+- Add token-budget prune triggers.
+
+## References and anchors
+
+- \`src/session-ledger/memory-state.ts\`
+- \`src/memory-update/observer-recording.ts\`
+`;
+	const bloated = `# Checkpoint
+
+## Current objective
+
+Make checkpoint pruning reliable.
+
+## Progress and decisions
+
+Keep anchor \`checkpoint-prune-shrinks-bloated-checkpoint\`.
+Duplicate filler alpha beta gamma alpha beta gamma alpha beta gamma.
+Duplicate filler alpha beta gamma alpha beta gamma alpha beta gamma.
+Duplicate filler alpha beta gamma alpha beta gamma alpha beta gamma.
+
+## Important context
+
+Prune may shrink or repair only.
+Prune may shrink or repair only.
+Prune may shrink or repair only.
+
+## Remaining work
+
+Preserve active anchors while removing duplicate detail.
+
+## References and anchors
+
+- \`checkpoint-prune-shrinks-bloated-checkpoint\`
+`;
+	return [
+		editorPruneScenario({
+			id: "checkpoint-prune-preserves-active-decisions",
+			initialContent: activeDecisions,
+			maxTurns: 8,
+			grade: (result) => gradeContent(result, {
+				requireChanged: true,
+				requireAll: ["token budgets", "unchanged prune emits no ledger event", "normal checkpoint catch-up first", "src/memory-update/checkpoint-lifecycle.ts", "checkpointPruneTargetTokens"],
+				forbidAny: ["remove-this remove-this remove-this remove-this"],
+			}),
+		}),
+		editorPruneScenario({
+			id: "checkpoint-prune-does-not-add-new-facts",
+			initialContent: EMPTY_CHECKPOINT_MARKDOWN.replace("None known.", "Prune only existing checkpoint facts."),
+			maxTurns: 8,
+			grade: (result) => gradeContent(result, {
+				requireUnchanged: true,
+				requireAll: ["Prune only existing checkpoint facts"],
+				forbidAny: ["pnpm typecheck", "openai-codex", "/home/syzom", "session replay", "ObserverRecordPlanner"],
+			}),
+		}),
+		editorPruneScenario({
+			id: "checkpoint-prune-preserves-remaining-work",
+			initialContent: remainingWork,
+			maxTurns: 8,
+			grade: (result) => gradeContent(result, {
+				requireChanged: true,
+				requireAll: ["memory state", "observer recording", "checkpoint lifecycle", "token-budget prune", "src/session-ledger/memory-state.ts", "src/memory-update/observer-recording.ts"],
+				forbidAny: ["repeated repeated repeated repeated"],
+			}),
+		}),
+		editorPruneScenario({
+			id: "checkpoint-prune-shrinks-bloated-checkpoint",
+			initialContent: bloated,
+			maxTurns: 8,
+			grade: (result) => gradeContent(result, {
+				requireChanged: true,
+				requireAll: ["checkpoint-prune-shrinks-bloated-checkpoint", "Preserve active anchors"],
+				forbidAny: ["alpha beta gamma alpha beta gamma alpha beta gamma"],
+				shorterThan: bloated,
+			}),
+		}),
+	];
 }
 
 export function loadCheckpointEvalCases(): EvalCase[] {
@@ -161,6 +291,7 @@ Keep checkpoint concise.
 				forbidAny: ["repeat-me repeat-me repeat-me repeat-me"],
 			}),
 		},
+		...pruneEvalCases(),
 		realSessionWideContextCase(),
 		realSessionReplayCase(),
 	];

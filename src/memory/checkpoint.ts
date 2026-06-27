@@ -1,28 +1,8 @@
 import { hashId, checkpointId } from "./ids.js";
+import { EMPTY_CHECKPOINT_MARKDOWN, isValidCheckpointMarkdown } from "./checkpoint-format.js";
 import type { Checkpoint, Observation } from "../session-ledger/index.js";
-import { isValidCheckpointMarkdown } from "../session-ledger/index.js";
 
-export const EMPTY_CHECKPOINT_MARKDOWN = `# Checkpoint
-
-## Current objective
-
-None known.
-
-## Progress and decisions
-
-None known.
-
-## Important context
-
-None known.
-
-## Remaining work
-
-None known.
-
-## References and anchors
-
-None known.`;
+export { EMPTY_CHECKPOINT_MARKDOWN } from "./checkpoint-format.js";
 
 export function checkpointFromMarkdown(content: string, createdAt = new Date().toISOString()): Checkpoint | undefined {
 	if (!isValidCheckpointMarkdown(content)) return undefined;

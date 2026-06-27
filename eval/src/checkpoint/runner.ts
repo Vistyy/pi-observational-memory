@@ -59,6 +59,8 @@ async function runEditorCase(testCase: EditorEvalCase, resolved: ResolvedEvalMod
 			usage,
 			durationMs: Date.now() - started,
 			metadata: testCase.metadata,
+			initialContent: testCase.initialContent,
+			observationsText: testCase.observationsText,
 		};
 	} catch (error) {
 		return runtimeErrorRecord(testCase.id, "editor", iteration, started, usage, error, testCase.metadata);
@@ -89,6 +91,10 @@ async function runReplayCase(testCase: SessionReplayEvalCase, resolved: Resolved
 			appendedEntryTypes: result.appendedEntries.map((entry) => entry.customType ?? entry.type),
 			observationCount: result.observations.length,
 			checkpointCount: result.checkpointCount,
+			checkpointModes: result.checkpointModes,
+			latestCheckpointMode: result.latestCheckpointMode,
+			latestObservationIds: result.latestObservationIds,
+			latestCoversUpToObservationId: result.latestCoversUpToObservationId,
 			uncheckpointedObservationCount: result.uncheckpointedObservationCount,
 		};
 	} catch (error) {
@@ -122,11 +128,16 @@ export async function runCases(args: {
 	model: string;
 	thinking: ModelThinkingLevel;
 	repeat: number;
+	failFast?: boolean;
 }): Promise<EvalRecord[]> {
 	const resolved = await resolveModel(args.model);
 	const records: EvalRecord[] = [];
 	for (let iteration = 1; iteration <= args.repeat; iteration++) {
-		for (const testCase of args.cases) records.push(await runCase(testCase, resolved, args.thinking, iteration));
+		for (const testCase of args.cases) {
+			const record = await runCase(testCase, resolved, args.thinking, iteration);
+			records.push(record);
+			if (args.failFast && !record.passed) return records;
+		}
 	}
 	return records;
 }

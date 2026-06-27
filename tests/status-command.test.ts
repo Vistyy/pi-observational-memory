@@ -31,6 +31,8 @@ function setup(args: { entries: TestEntry[]; runtime?: Partial<Runtime>; health?
 			observerToolResultErrorMaxLines: 20,
 			observerToolResultLineMaxChars: 300,
 			observerToolOutputPolicies: {},
+			checkpointPruneTargetTokens: 4000,
+			checkpointPruneHardMaxTokens: 8000,
 		},
 		...args.runtime,
 	};
@@ -43,6 +45,7 @@ function setup(args: { entries: TestEntry[]; runtime?: Partial<Runtime>; health?
 			lastCheckpointEditorError: undefined,
 			observeGap: 0,
 			checkpointGap: 0,
+			checkpointPruneDue: false,
 			...args.health,
 		})),
 	} as unknown as MemoryLifecycle;
@@ -65,6 +68,7 @@ describe("/om:status", () => {
 		expect(output).toContain("Current:      none");
 		expect(output).toContain("Observe gap:    0 records");
 		expect(output).toContain("Checkpoint gap: 0 observations");
+		expect(output).toContain("Prune due:      no");
 		expect(output).not.toContain("Strategy:");
 	});
 
@@ -84,6 +88,7 @@ describe("/om:status", () => {
 		expect(output).toContain("Current:      check_cccccccccccc");
 		expect(output).toContain(`Coverage:     ${obsA.id}`);
 		expect(output).toContain("Checkpoint gap: 1 observations");
+		expect(output).toContain("Prune due:      no");
 	});
 
 	it("shows full details on request", async () => {
@@ -102,6 +107,7 @@ describe("/om:status", () => {
 		expect(output).toContain("Strategy: replacement");
 		expect(output).toContain("Ledger observations: 1 recorded");
 		expect(output).toContain("Checkpoint versions: 1 recorded");
+		expect(output).toContain("Checkpoint tokens:");
 	});
 
 	it("shows usage totals in full mode", async () => {
@@ -137,7 +143,7 @@ describe("/om:status", () => {
 		const output = await setup({
 			entries: [],
 			runtime: {
-				config: { strategy: "off", observeEveryMessages: 8, observeHardCapRecords: 32 },
+				config: { strategy: "off", observeEveryMessages: 8, observeHardCapRecords: 32, checkpointPruneTargetTokens: 4000, checkpointPruneHardMaxTokens: 8000 },
 			},
 			health: {
 				memoryUpdateInFlight: true,

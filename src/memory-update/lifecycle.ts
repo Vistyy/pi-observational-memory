@@ -1,25 +1,22 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { runObserver } from "../agents/observer/agent.js";
 import { STRATEGY } from "../config.js";
 import { debugLog, debugSessionMetadata, withDebugLogContext } from "../debug-log.js";
-import { serializeObserverSourceEntries } from "../memory/serialization/observer.js";
+import { estimateStringTokens } from "../memory/token-estimate.js";
 import type { Runtime } from "../runtime.js";
 import {
-	OM_OBSERVATIONS_RECORDED,
 	buildCompactionMemory,
-	buildObservationsRecordedData,
-	entryIndexById,
-	foldLedger,
+	buildSessionMemoryState,
+	observerSourceEntriesAfterCoverage,
 	renderCheckpointSummary,
-	sourceEntriesAfterIndex,
+	uncheckpointedObservationsBeforeEntry,
 	type CheckpointMemoryDetails,
 	type Entry,
 	type Observation,
 } from "../session-ledger/index.js";
-import { commonAgentArgs } from "./agent-args.js";
-import { runCheckpointStage } from "./checkpoint-stage.js";
+import { runCheckpointLifecycle } from "./checkpoint-lifecycle.js";
 import { computeMemoryStageWork, type MemoryUpdateTrigger } from "./due.js";
 import { makeModelResolver } from "./model-resolver.js";
+import { recordObserverObservations } from "./observer-recording.js";
 import { runObserverStage } from "./observer-stage.js";
 import type { MemoryUpdateCtx, StageOutcome } from "./types.js";
 
@@ -36,6 +33,7 @@ export type LifecycleHealth = {
 	lastCheckpointEditorError?: string;
 	observeGap: number;
 	checkpointGap: number;
+	checkpointPruneDue: boolean;
 };
 
 export type CompactionPreparation =
@@ -64,7 +62,7 @@ export class MemoryLifecycle {
 
 		const entries = ctx.sessionManager.getBranch() as Entry[];
 		const work = computeMemoryStageWork(entries, this.runtime, trigger);
-		if (work.observerWork.length === 0 && work.checkpointWork.length === 0) return;
+		if (work.observerWork.length === 0 && work.checkpointWork.length === 0 && !work.checkpointPruneDue) return;
 
 		void this.launchMemoryUpdateTask(ctx, async () => this.runLoop(ctx, trigger));
 	}
@@ -127,6 +125,7 @@ export class MemoryLifecycle {
 			lastCheckpointEditorError: this.lastCheckpointEditorError,
 			observeGap: work.observerWork.length,
 			checkpointGap: work.checkpointWork.length,
+			checkpointPruneDue: work.checkpointPruneDue,
 		};
 	}
 
@@ -162,10 +161,11 @@ export class MemoryLifecycle {
 				if (!this.memoryUpdateRerunRequested) return;
 				const nextEntries = ctx.sessionManager.getBranch() as Entry[];
 				const nextWork = computeMemoryStageWork(nextEntries, this.runtime, "turn_end");
-				if (nextWork.observerWork.length === 0 && nextWork.checkpointWork.length === 0) return;
+				if (nextWork.observerWork.length === 0 && nextWork.checkpointWork.length === 0 && !nextWork.checkpointPruneDue) return;
 				debugLog("memory_update.rerun", {
 					observerRecordsPending: nextWork.observerWork.length,
 					checkpointObservationsPending: nextWork.checkpointWork.length,
+					checkpointPruneDue: nextWork.checkpointPruneDue,
 				});
 				nextTrigger = "turn_end";
 			}
@@ -193,8 +193,27 @@ export class MemoryLifecycle {
 		}
 
 		if (work.checkpointWork.length > 0) {
-			const checkpointOutcome = await this.runTrackedStage(ctx, "checkpoint-editor", async () => runCheckpointStage(this.pi, this.runtime, ctx, resolveModel, work.checkpointWork));
+			const checkpointOutcome = await this.runTrackedStage(ctx, "checkpoint-editor", async () => runCheckpointLifecycle({
+				pi: this.pi,
+				runtime: this.runtime,
+				ctx,
+				resolveModel,
+				request: { purpose: "update", observations: work.checkpointWork },
+			}));
 			if (checkpointOutcome === "abort") return;
+			entries = ctx.sessionManager.getBranch() as Entry[];
+			work = computeMemoryStageWork(entries, this.runtime, trigger);
+		}
+
+		if (work.checkpointPruneDue) {
+			const pruneOutcome = await this.runTrackedStage(ctx, "checkpoint-editor", async () => runCheckpointLifecycle({
+				pi: this.pi,
+				runtime: this.runtime,
+				ctx,
+				resolveModel,
+				request: { purpose: "prune", reason: "health" },
+			}));
+			if (pruneOutcome === "abort") return;
 		}
 	}
 
@@ -220,10 +239,9 @@ export class MemoryLifecycle {
 	private async ensureObservedBeforeCompaction(ctx: MemoryUpdateCtx, firstKeptEntryId?: string): Promise<Observation[]> {
 		if (this.inFlightObserverStagePromise) await this.inFlightObserverStagePromise;
 		const entries = ctx.sessionManager.getBranch() as Entry[];
-		const firstKeptIndex = entryIndexById(entries).get(firstKeptEntryId ?? "");
-		if (firstKeptIndex === undefined) return [];
-		const folded = foldLedger(entries);
-		const sourceEntries = sourceEntriesAfterIndex(entries, folded.lastObservationCoverageIndex, firstKeptIndex);
+		const state = buildSessionMemoryState(entries);
+		if (!firstKeptEntryId || !state.idToIndex.has(firstKeptEntryId)) return [];
+		const sourceEntries = observerSourceEntriesAfterCoverage(state, firstKeptEntryId);
 		if (sourceEntries.length === 0) return [];
 		const runId = `compaction-observer-flush-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`;
 		const sessionMetadata = debugSessionMetadata(ctx);
@@ -236,55 +254,71 @@ export class MemoryLifecycle {
 	}
 
 	private async ensureCheckpointedBeforeCompaction(ctx: MemoryUpdateCtx, firstKeptEntryId?: string): Promise<boolean> {
-		const entries = ctx.sessionManager.getBranch() as Entry[];
-		const firstKeptIndex = entryIndexById(entries).get(firstKeptEntryId ?? "");
-		if (firstKeptIndex === undefined) return true;
-		const observations = this.uncheckpointedObservationsBeforeIndex(entries, firstKeptIndex);
+		if (!firstKeptEntryId) return true;
+		let entries = ctx.sessionManager.getBranch() as Entry[];
+		let state = buildSessionMemoryState(entries);
+		if (!state.idToIndex.has(firstKeptEntryId)) return true;
+		let observations = uncheckpointedObservationsBeforeEntry(state, firstKeptEntryId);
+		if (observations.length > 0) {
+			const outcome = await this.runTrackedStage(ctx, "checkpoint-editor", async () => runCheckpointLifecycle({
+				pi: this.pi,
+				runtime: this.runtime,
+				ctx,
+				resolveModel: makeModelResolver(this.runtime, ctx),
+				request: { purpose: "update", observations },
+			}));
+			if (outcome === "abort") return false;
+		}
+
+		entries = ctx.sessionManager.getBranch() as Entry[];
+		state = buildSessionMemoryState(entries);
+		observations = uncheckpointedObservationsBeforeEntry(state, firstKeptEntryId);
+		if (observations.length === 0 && !this.checkpointOverHardMax(state)) return true;
+		if (!this.checkpointOverHardMax(state)) return observations.length === 0;
+
+		const pruneOutcome = await this.runTrackedStage(ctx, "checkpoint-editor", async () => runCheckpointLifecycle({
+			pi: this.pi,
+			runtime: this.runtime,
+			ctx,
+			resolveModel: makeModelResolver(this.runtime, ctx),
+			request: { purpose: "prune", reason: "compaction-pressure" },
+		}));
+		if (pruneOutcome === "abort") return false;
+
+		entries = ctx.sessionManager.getBranch() as Entry[];
+		state = buildSessionMemoryState(entries);
+		if (this.checkpointOverHardMax(state)) return false;
+		observations = uncheckpointedObservationsBeforeEntry(state, firstKeptEntryId);
 		if (observations.length === 0) return true;
-		const outcome = await this.runTrackedStage(ctx, "checkpoint-editor", async () => runCheckpointStage(this.pi, this.runtime, ctx, makeModelResolver(this.runtime, ctx), observations));
-		if (outcome === "abort") return false;
-		const nextEntries = ctx.sessionManager.getBranch() as Entry[];
-		return this.uncheckpointedObservationsBeforeIndex(nextEntries, firstKeptIndex).length === 0;
+
+		const retryOutcome = await this.runTrackedStage(ctx, "checkpoint-editor", async () => runCheckpointLifecycle({
+			pi: this.pi,
+			runtime: this.runtime,
+			ctx,
+			resolveModel: makeModelResolver(this.runtime, ctx),
+			request: { purpose: "update", observations },
+		}));
+		if (retryOutcome === "abort") return false;
+		const finalState = buildSessionMemoryState(ctx.sessionManager.getBranch() as Entry[]);
+		return uncheckpointedObservationsBeforeEntry(finalState, firstKeptEntryId).length === 0 && !this.checkpointOverHardMax(finalState);
 	}
 
-	private uncheckpointedObservationsBeforeIndex(entries: Entry[], firstKeptIndex: number): Observation[] {
-		const folded = foldLedger(entries);
-		const idToIndex = entryIndexById(entries);
-		return folded.uncheckpointedObservations.filter((observation) => observation.sourceEntryIds.some((sourceEntryId) => {
-			const sourceIndex = idToIndex.get(sourceEntryId);
-			return sourceIndex === undefined || sourceIndex < firstKeptIndex;
-		}));
+	private checkpointOverHardMax(state: ReturnType<typeof buildSessionMemoryState>): boolean {
+		const checkpoint = state.folded.checkpoint;
+		return !!checkpoint && estimateStringTokens(checkpoint.content) > this.runtime.config.checkpointPruneHardMaxTokens;
 	}
 
 	private async runCompactionObserverFlush(ctx: MemoryUpdateCtx, sourceEntries: Entry[]): Promise<Observation[]> {
 		try {
-			const coversUpToId = sourceEntries.at(-1)?.id;
-			if (!coversUpToId) return [];
-			const { text: chunk, sourceEntryIds } = serializeObserverSourceEntries(sourceEntries, {
-				toolResultSummaryMaxLines: this.runtime.config.observerToolResultSummaryMaxLines,
-				toolResultErrorMaxLines: this.runtime.config.observerToolResultErrorMaxLines,
-				toolResultLineMaxChars: this.runtime.config.observerToolResultLineMaxChars,
-				toolOutputPolicies: this.runtime.config.observerToolOutputPolicies,
+			const result = await recordObserverObservations({
+				pi: this.pi,
+				runtime: this.runtime,
+				ctx,
+				resolveModel: makeModelResolver(this.runtime, ctx),
+				sourceEntries,
+				purpose: "compaction-flush",
 			});
-			if (!chunk.trim() || sourceEntryIds.length === 0) {
-				const data = buildObservationsRecordedData([], coversUpToId);
-				if (data) this.pi.appendEntry(OM_OBSERVATIONS_RECORDED, data);
-				debugLog("observer.compaction_flush_unrenderable", { coversUpToId });
-				return [];
-			}
-
-			const resolved = await makeModelResolver(this.runtime, ctx)("observer");
-			if (!resolved) return [];
-			const observations = await runObserver({
-				...commonAgentArgs(this.pi, this.runtime, resolved, this.runtime.config.observerThinking, "compaction-flush"),
-				chunk,
-				allowedSourceEntryIds: sourceEntryIds,
-			});
-			if (!observations) return [];
-			const data = buildObservationsRecordedData(observations, coversUpToId);
-			if (!data) return [];
-			this.pi.appendEntry(OM_OBSERVATIONS_RECORDED, data);
-			return data.observations;
+			return result.observations;
 		} catch (error) {
 			const reason = this.recordStageError(ctx, "observer", error);
 			debugLog("observer.error", { errorMessage: reason });

@@ -3,3 +3,4 @@ export * from "./fold.js";
 export * from "./compaction-memory.js";
 export * from "./render-summary.js";
 export * from "./memory-tokens.js";
+export * from "./memory-state.js";

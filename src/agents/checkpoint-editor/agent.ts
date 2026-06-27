@@ -7,7 +7,7 @@ import type { Static } from "typebox";
 import { isValidCheckpointMarkdown } from "../../session-ledger/index.js";
 import { debugLog } from "../../debug-log.js";
 import { runMemoryAgentLoop, type MemoryAgentUsage } from "../common.js";
-import { CHECKPOINT_EDITOR_SYSTEM, checkpointEditorUserText } from "./prompts.js";
+import { CHECKPOINT_EDITOR_SYSTEM, checkpointEditorPruneUserText, checkpointEditorUpdateUserText } from "./prompts.js";
 
 interface RunCheckpointEditorArgs {
 	model: Model<any>;
@@ -131,6 +131,10 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		},
 	};
 
+	const userText = args.purpose === "prune"
+		? checkpointEditorPruneUserText()
+		: checkpointEditorUpdateUserText({ observationsText: args.observationsText });
+
 	await runMemoryAgentLoop({
 		model: args.model,
 		apiKey: args.apiKey,
@@ -140,7 +144,7 @@ export async function runCheckpointEditor(args: RunCheckpointEditorArgs): Promis
 		maxTurns: args.maxTurns,
 		thinkingLevel: args.thinkingLevel,
 		systemPrompt: CHECKPOINT_EDITOR_SYSTEM,
-		userText: checkpointEditorUserText({ purpose: args.purpose, observationsText: args.observationsText }),
+		userText,
 		tools: [readTool as AgentTool<any>, editTool as AgentTool<any>, finishTool as AgentTool<any>],
 		agentName: "checkpoint-editor",
 		onUsage: args.onUsage,
